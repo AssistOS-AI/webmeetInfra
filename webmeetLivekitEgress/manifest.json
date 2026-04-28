@@ -1,5 +1,5 @@
 {
-    "container": "livekit/egress:latest",
+    "container": "docker.io/livekit/egress:latest",
     "about": "LiveKit egress worker for WebMeet recordings.",
     "network": {
         "name": "webmeet",

@@ -1,5 +1,5 @@
 {
-    "container": "livekit/livekit-server:latest",
+    "container": "docker.io/livekit/livekit-server:latest",
     "about": "LiveKit SFU for WebMeet rooms.",
     "network": {
         "name": "webmeet",
