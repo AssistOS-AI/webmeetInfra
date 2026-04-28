@@ -1,5 +1,5 @@
 {
-    "container": "coturn/coturn:4.6.2",
+    "container": "docker.io/coturn/coturn:4.6.2",
     "about": "TURN/STUN server for WebMeet connectivity.",
     "start": "sh -lc 'turnserver --no-cli --no-tls --no-dtls --listening-port=3478 --min-port=${WEBMEET_TURN_MIN_PORT:-20000} --max-port=${WEBMEET_TURN_MAX_PORT:-20010} --external-ip=${WEBMEET_TURN_EXTERNAL_IP:-127.0.0.1} --realm=${WEBMEET_TURN_REALM:-webmeet.local} --fingerprint --lt-cred-mech --user=${WEBMEET_TURN_USER:-webmeet}:${WEBMEET_TURN_PASSWORD:-webmeet}'",
     "profiles": {
