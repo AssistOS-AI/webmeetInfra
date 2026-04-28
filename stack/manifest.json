@@ -3,7 +3,7 @@
     "about": "WebMeet infrastructure dependency bundle for webmeetAgent.",
     "startIsolated": true,
     "workdir": "/tmp",
-    "start": "true",
+    "start": "sh -c 'mkdir -p /tmp/webmeet-stack && printf ok > /tmp/webmeet-stack/index.html && exec httpd -f -p 7000 -h /tmp/webmeet-stack'",
     "enable": [
         "webmeetInfra/webmeetRedis",
         "webmeetInfra/webmeetCoturn",
