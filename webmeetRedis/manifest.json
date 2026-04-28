@@ -1,0 +1,21 @@
+{
+    "container": "docker.io/library/redis:7-alpine",
+    "about": "Redis for WebMeet LiveKit state.",
+    "workdir": "/data",
+    "network": {
+        "name": "webmeet",
+        "aliases": ["webmeetRedis"]
+    },
+    "start": "redis-server --save 60 1 --loglevel warning",
+    "profiles": {
+        "default": {
+            "ports": ["6379:6379"]
+        },
+        "dev": {
+            "ports": ["16379:6379"]
+        },
+        "prod": {
+            "ports": ["6379:6379"]
+        }
+    }
+}

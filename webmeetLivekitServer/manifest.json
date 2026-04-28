@@ -1,0 +1,85 @@
+{
+    "container": "livekit/livekit-server:latest",
+    "about": "LiveKit SFU for WebMeet rooms.",
+    "network": {
+        "name": "webmeet",
+        "aliases": ["webmeetLivekitServer"]
+    },
+    "start": "--config /code/livekit.yaml",
+    "volumes": {
+        ".ploinky/agents/webmeetLivekitServer/livekit.yaml": "/code/livekit.yaml"
+    },
+    "volumeOptions": {
+        "/code/livekit.yaml": {
+            "generated": true,
+            "required": true
+        }
+    },
+    "profiles": {
+        "default": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "env": [
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "default": "devkey"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "default": "devsecretdevsecretdevsecretdevsecret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "false"
+                }
+            ],
+            "ports": ["7880:7880", "7881:7881", "7882-7892:7882-7892/udp"]
+        },
+        "dev": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "env": [
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "default": "devkey"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "default": "devsecretdevsecretdevsecretdevsecret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "false"
+                }
+            ],
+            "ports": ["17880:7880", "17881:17881", "17882-17892:17882-17892/udp"]
+        },
+        "prod": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "env": [
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": true
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": true
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "true"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_NODE_IP",
+                    "required": false
+                }
+            ],
+            "ports": ["0.0.0.0:7880:7880", "0.0.0.0:7881:7881", "0.0.0.0:7882-7892:7882-7892/udp"]
+        }
+    }
+}
