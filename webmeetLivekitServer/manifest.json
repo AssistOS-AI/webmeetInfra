@@ -5,6 +5,9 @@
         "name": "webmeet",
         "aliases": ["webmeetLivekitServer"]
     },
+    "enable": [
+        "webmeetInfra/webmeetRedis"
+    ],
     "start": "--config /code/livekit.yaml",
     "volumes": {
         ".ploinky/agents/webmeetLivekitServer/livekit.yaml": "/code/livekit.yaml"

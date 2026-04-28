@@ -5,6 +5,10 @@
         "name": "webmeet",
         "aliases": ["webmeetLivekitEgress"]
     },
+    "enable": [
+        "webmeetInfra/webmeetLivekitServer",
+        "webmeetInfra/webmeetRedis"
+    ],
     "start": "true",
     "capabilities": ["SYS_ADMIN"],
     "volumes": {
