@@ -24,33 +24,63 @@
     "profiles": {
         "default": {
             "preinstall": "scripts/hooks/preinstall.sh",
-            "env": {
-                "EGRESS_CONFIG_FILE": "/code/egress.yaml",
-                "WEBMEET_LIVEKIT_API_KEY": "devkey",
-                "WEBMEET_LIVEKIT_API_SECRET": "devsecretdevsecretdevsecretdevsecret"
-            },
+            "env": [
+                {
+                    "name": "EGRESS_CONFIG_FILE",
+                    "required": false,
+                    "default": "/code/egress.yaml"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "default": "devkey"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "default": "devsecretdevsecretdevsecretdevsecret"
+                }
+            ],
             "ports": ["7980:7980"]
         },
         "dev": {
             "preinstall": "scripts/hooks/preinstall.sh",
-            "env": {
-                "EGRESS_CONFIG_FILE": "/code/egress.yaml",
-                "WEBMEET_LIVEKIT_API_KEY": "devkey",
-                "WEBMEET_LIVEKIT_API_SECRET": "devsecretdevsecretdevsecretdevsecret"
-            },
+            "env": [
+                {
+                    "name": "EGRESS_CONFIG_FILE",
+                    "required": false,
+                    "default": "/code/egress.yaml"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "default": "devkey"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "default": "devsecretdevsecretdevsecretdevsecret"
+                }
+            ],
             "ports": ["17980:7980"]
         },
         "prod": {
             "preinstall": "scripts/hooks/preinstall.sh",
-            "env": {
-                "EGRESS_CONFIG_FILE": "/code/egress.yaml",
-                "WEBMEET_LIVEKIT_API_KEY": {
+            "env": [
+                {
+                    "name": "EGRESS_CONFIG_FILE",
+                    "required": false,
+                    "default": "/code/egress.yaml"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
                     "required": true
                 },
-                "WEBMEET_LIVEKIT_API_SECRET": {
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
                     "required": true
                 }
-            },
+            ],
             "ports": ["7980:7980"]
         }
     }
