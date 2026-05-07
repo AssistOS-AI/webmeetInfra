@@ -24,11 +24,13 @@
             "env": [
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": false
+                    "required": false,
+                    "default": "devkey"
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": false
+                    "required": false,
+                    "default": "devsecretdevsecretdevsecretdevsecret"
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",

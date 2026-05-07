@@ -22,7 +22,8 @@
                 },
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
-                    "required": false
+                    "required": false,
+                    "default": "webmeet"
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",
