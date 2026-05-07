@@ -48,6 +48,11 @@
                     "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
                     "required": false,
                     "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
                 }
             ],
             "ports": ["7880:7880", "7881:7881", "7882-7892:7882-7892/udp"]
@@ -81,6 +86,11 @@
                     "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
                     "required": false,
                     "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
                 }
             ],
             "ports": ["17880:7880", "17881:17881", "17882-17892:17882-17892/udp"]
@@ -118,6 +128,11 @@
                     "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
                     "required": false,
                     "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
                 }
             ],
             "ports": ["0.0.0.0:7880:7880", "0.0.0.0:7881:7881", "0.0.0.0:7882-7892:7882-7892/udp"]

@@ -11,6 +11,7 @@ api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required
 use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-false}"
 node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
 log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
+force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
 
 rtc_tcp_port=7881
 rtc_port_range_start=7882
@@ -31,6 +32,7 @@ rtc:
   port_range_start: ${rtc_port_range_start}
   port_range_end: ${rtc_port_range_end}
   use_external_ip: ${use_external_ip}
+  force_tcp: ${force_tcp}
 EOF
 if [[ -n "$node_ip" && "$use_external_ip" != "true" ]]; then
   cat >> "${agent_dir}/livekit.yaml" <<EOF

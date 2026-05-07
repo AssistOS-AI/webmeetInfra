@@ -22,6 +22,8 @@ LiveKit signaling and media ports are network-sensitive surfaces. Local developm
 
 The optional `WEBMEET_LIVEKIT_LOG_LEVEL` setting controls the generated LiveKit `logging.level` value and defaults to `info`. Operators may raise it for short diagnostic windows, but generated config and logs must still keep API keys, secrets, tokens, SDP payloads, and credentials out of persisted diagnostics.
 
+The optional `WEBMEET_LIVEKIT_FORCE_TCP` setting controls LiveKit `rtc.force_tcp` and defaults to `false`. Production operators may enable it when the host or client network path drops UDP media packets while TCP signaling remains healthy.
+
 ## Decisions & Questions
 
 ### Question #1: Why document this infrastructure service as a Ploinky agent?
