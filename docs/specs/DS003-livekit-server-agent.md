@@ -18,6 +18,8 @@ The `webmeetLivekitServer` agent owns the LiveKit SFU runtime. Its manifest must
 
 LiveKit signaling and media ports are network-sensitive surfaces. Local development may expose them on localhost-style ports, while production review must treat any non-local binding as an operator network-security decision.
 
+Production startup must fail closed when `WEBMEET_LIVEKIT_API_KEY` or `WEBMEET_LIVEKIT_API_SECRET` is missing. The production profile must not generate `livekit.yaml` with the development `devkey` or `devsecretdevsecretdevsecretdevsecret` fallback.
+
 ## Decisions & Questions
 
 ### Question #1: Why document this infrastructure service as a Ploinky agent?

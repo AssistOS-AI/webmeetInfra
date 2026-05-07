@@ -18,6 +18,8 @@ The `webmeetCoturn` agent owns TURN/STUN connectivity for WebMeet clients. Crede
 
 Production operators must review relay port exposure and external IP configuration before exposing the service beyond a local development host.
 
+Startup must require `WEBMEET_TURN_EXTERNAL_IP` and `WEBMEET_TURN_PASSWORD` instead of silently relying on command-line fallbacks. Development profiles may inject local defaults, but production must receive explicit values from Ploinky configuration.
+
 ## Decisions & Questions
 
 ### Question #1: Why document this infrastructure service as a Ploinky agent?
