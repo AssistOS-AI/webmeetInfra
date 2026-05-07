@@ -6,13 +6,8 @@ profile="${PLOINKY_PROFILE:-dev}"
 agent_dir="${workspace_root}/.ploinky/agents/webmeetLivekitServer"
 mkdir -p "$agent_dir"
 
-if [[ "$profile" == "prod" ]]; then
-  : "${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required in prod profile}"
-  : "${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required in prod profile}"
-fi
-
-api_key="${WEBMEET_LIVEKIT_API_KEY:-devkey}"
-api_secret="${WEBMEET_LIVEKIT_API_SECRET:-devsecretdevsecretdevsecretdevsecret}"
+api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
+api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
 use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-false}"
 node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
 
