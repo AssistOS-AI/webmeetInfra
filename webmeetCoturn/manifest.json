@@ -22,7 +22,11 @@
                 },
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
-                    "required": false
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",
@@ -57,7 +61,10 @@
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
                     "required": false,
-                    "default": "webmeet"
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",
@@ -90,7 +97,11 @@
                 },
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
-                    "required": true
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",

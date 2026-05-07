@@ -24,11 +24,20 @@
             "env": [
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": false
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": false
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
@@ -44,12 +53,19 @@
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
                     "required": false,
-                    "default": "devkey"
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
                     "required": false,
-                    "default": "devsecretdevsecretdevsecretdevsecret"
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
@@ -64,11 +80,20 @@
             "env": [
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": true
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": true
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
