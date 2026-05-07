@@ -10,6 +10,7 @@ api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
 api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
 use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-false}"
 node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
+log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
 
 rtc_tcp_port=7881
 rtc_port_range_start=7882
@@ -23,6 +24,8 @@ fi
 
 cat > "${agent_dir}/livekit.yaml" <<EOF
 port: 7880
+logging:
+  level: ${log_level}
 rtc:
   tcp_port: ${rtc_tcp_port}
   port_range_start: ${rtc_port_range_start}

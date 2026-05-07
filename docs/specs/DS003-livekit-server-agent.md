@@ -20,6 +20,8 @@ LiveKit signaling and media ports are network-sensitive surfaces. Local developm
 
 `WEBMEET_LIVEKIT_API_KEY` and `WEBMEET_LIVEKIT_API_SECRET` are workspace-owned agent secrets and must be derived from `PLOINKY_DERIVED_MASTER_KEY` through manifest `derive: "derived-master"` entries. These values must use the shared LiveKit derivation identity so `webmeetAgent`, LiveKit server, and egress all agree on the same credentials. Production startup must fail closed only if derived values cannot be produced; no profile may generate `livekit.yaml` with hard-coded development credentials.
 
+The optional `WEBMEET_LIVEKIT_LOG_LEVEL` setting controls the generated LiveKit `logging.level` value and defaults to `info`. Operators may raise it for short diagnostic windows, but generated config and logs must still keep API keys, secrets, tokens, SDP payloads, and credentials out of persisted diagnostics.
+
 ## Decisions & Questions
 
 ### Question #1: Why document this infrastructure service as a Ploinky agent?
