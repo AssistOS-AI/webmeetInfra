@@ -12,3 +12,5 @@ This page indexes the local design specification set. The DS files are the sourc
 - [DS005 - Coturn Agent](specsLoader.html?spec=DS005-coturn-agent.md)
 - [DS006 - Redis Agent](specsLoader.html?spec=DS006-redis-agent.md)
 - [DS007 - Ploinky Runtime Invariants](specsLoader.html?spec=DS007-ploinky-runtime-invariants.md)
+- [DS008 - LiveKit Nginx Agent](specsLoader.html?spec=DS008-livekit-nginx-agent.md)
+- [DS009 - LiveKit Certbot Agent](specsLoader.html?spec=DS009-livekit-certbot-agent.md)
