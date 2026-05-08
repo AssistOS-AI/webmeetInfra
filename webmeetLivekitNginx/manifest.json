@@ -26,7 +26,7 @@
         }
     },
     "profiles": {
-        "prod": {
+        "default": {
             "preinstall": "scripts/hooks/preinstall.sh",
             "env": [
                 {
