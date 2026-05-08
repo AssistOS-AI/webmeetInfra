@@ -11,6 +11,7 @@
         "webmeetInfra/webmeetLivekitEgress"
     ],
     "profiles": {
+        "default": {},
         "prod": {
             "enable": [
                 "webmeetInfra/webmeetLivekitNginx"
