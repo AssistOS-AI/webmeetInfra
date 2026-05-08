@@ -1,5 +1,5 @@
 {
-    "container": "docker.io/livekit/livekit-server:latest",
+    "container": "docker.io/livekit/livekit-server:${WEBMEET_LIVEKIT_VERSION}",
     "about": "LiveKit SFU for WebMeet rooms.",
     "network": {
         "mode": "host"
@@ -52,6 +52,11 @@
                     "name": "WEBMEET_LIVEKIT_FORCE_TCP",
                     "required": false,
                     "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_VERSION",
+                    "required": false,
+                    "default": "v1.11.0"
                 }
             ],
             "ports": ["7880:7880", "7881:7881", "7882-7892:7882-7892/udp"]
@@ -90,6 +95,11 @@
                     "name": "WEBMEET_LIVEKIT_FORCE_TCP",
                     "required": false,
                     "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_VERSION",
+                    "required": false,
+                    "default": "v1.11.0"
                 }
             ],
             "ports": ["17880:7880", "17881:17881", "17882-17892:17882-17892/udp"]
@@ -132,6 +142,11 @@
                     "name": "WEBMEET_LIVEKIT_FORCE_TCP",
                     "required": false,
                     "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_VERSION",
+                    "required": false,
+                    "default": "v1.11.0"
                 }
             ],
             "ports": ["0.0.0.0:7880:7880", "0.0.0.0:7881:7881", "0.0.0.0:7882-7892:7882-7892/udp"]
