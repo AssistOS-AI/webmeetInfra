@@ -18,6 +18,15 @@ The `webmeetLivekitNginx` agent owns TLS termination, ACME HTTP-01 challenge ser
 
 The container image is pinned through `WEBMEET_NGINX_VERSION` and the manifest expands `docker.io/library/nginx:${WEBMEET_NGINX_VERSION}`. The default tag is a current Alpine-based stable release; operators may bump it through the workspace var without editing the manifest.
 
+When podman runs rootless on the host (the production topology), the kernel sysctl `net.ipv4.ip_unprivileged_port_start` must be lowered to `80` (or `0`) so the container's master nginx process can bind `:80` and `:443`. Without it, nginx exits with `bind() to 0.0.0.0:80 failed (13: Permission denied)`. Set it persistently:
+
+```sh
+echo "net.ipv4.ip_unprivileged_port_start = 80" | sudo tee /etc/sysctl.d/99-rootless-low-ports.conf
+sudo sysctl -p /etc/sysctl.d/99-rootless-low-ports.conf
+```
+
+This is a one-time host kernel setting on rootless-podman hosts; it is not Ploinky's concern at runtime, and applies to any rootless container (or user process) that needs to bind a low port. On rootful-podman or root-run-container hosts, the sysctl change is unnecessary.
+
 The agent shares two volumes with `webmeetLivekitCertbot` (DS009):
 
 - `.ploinky/data/webmeetTls/letsencrypt` mounted at `/etc/letsencrypt` (read by Nginx for cert and key files; written by certbot during issue and renewal).
