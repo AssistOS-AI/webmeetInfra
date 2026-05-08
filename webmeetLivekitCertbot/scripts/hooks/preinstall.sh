@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+profile="${PLOINKY_PROFILE:-default}"
+if [ "$profile" != "prod" ]; then
+    echo "[webmeetLivekitCertbot] ERROR: this agent runs only in the 'prod' profile (active profile: '$profile')." >&2
+    echo "[webmeetLivekitCertbot] To enable, switch to prod first: ploinky profile prod" >&2
+    exit 1
+fi
+
 workspace_root="${PLOINKY_CWD:-$PWD}"
 agent_dir="${workspace_root}/.ploinky/agents/webmeetLivekitCertbot"
 data_dir="${workspace_root}/.ploinky/data/webmeetTls"

@@ -14,10 +14,14 @@ log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
 force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
 redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"
 
+signal_port=7880
 rtc_tcp_port=7881
 rtc_port_range_start=7882
 rtc_port_range_end=7892
 if [[ "$profile" == "dev" ]]; then
+  # Under host networking the manifest's "host:container" form is metadata only;
+  # LiveKit must bind the ports the readiness probe targets.
+  signal_port=17880
   rtc_tcp_port=17881
   rtc_port_range_start=17882
   rtc_port_range_end=17892
@@ -25,7 +29,7 @@ if [[ "$profile" == "dev" ]]; then
 fi
 
 cat > "${agent_dir}/livekit.yaml" <<EOF
-port: 7880
+port: ${signal_port}
 logging:
   level: ${log_level}
 rtc:

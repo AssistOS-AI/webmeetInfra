@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+profile="${PLOINKY_PROFILE:-default}"
+if [ "$profile" != "prod" ]; then
+    echo "[webmeetLivekitNginx] ERROR: this agent runs only in the 'prod' profile (active profile: '$profile')." >&2
+    echo "[webmeetLivekitNginx] To enable, switch to prod first: ploinky profile prod" >&2
+    exit 1
+fi
+
 workspace_root="${PLOINKY_CWD:-$PWD}"
 agent_dir="${workspace_root}/.ploinky/agents/webmeetLivekitNginx"
 data_dir="${workspace_root}/.ploinky/data/webmeetTls"
@@ -11,6 +18,34 @@ hostname="${WEBMEET_TLS_HOSTNAME:?WEBMEET_TLS_HOSTNAME is required}"
 http_port="${WEBMEET_TLS_HTTP_PORT:-80}"
 https_port="${WEBMEET_TLS_HTTPS_PORT:-443}"
 upstream="${WEBMEET_LIVEKIT_UPSTREAM:-http://127.0.0.1:7880}"
+
+validate_port() {
+    local name="$1"
+    local value="$2"
+    case "$value" in
+        ''|*[!0-9]*)
+            echo "[webmeetLivekitNginx] ERROR: $name must be a positive integer (got '$value')." >&2
+            exit 1
+            ;;
+    esac
+    if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
+        echo "[webmeetLivekitNginx] ERROR: $name must be in 1..65535 (got '$value')." >&2
+        exit 1
+    fi
+}
+
+validate_port WEBMEET_TLS_HTTP_PORT "$http_port"
+validate_port WEBMEET_TLS_HTTPS_PORT "$https_port"
+
+if ! printf '%s' "$hostname" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'; then
+    echo "[webmeetLivekitNginx] ERROR: WEBMEET_TLS_HOSTNAME is not a valid DNS name (got '$hostname')." >&2
+    exit 1
+fi
+
+if ! printf '%s' "$upstream" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$'; then
+    echo "[webmeetLivekitNginx] ERROR: WEBMEET_LIVEKIT_UPSTREAM must be http(s)://host[:port][/path] (got '$upstream')." >&2
+    exit 1
+fi
 
 cat > "${agent_dir}/livekit.conf" <<EOF
 server {

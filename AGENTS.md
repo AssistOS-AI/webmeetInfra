@@ -2,7 +2,7 @@
 
 ## Scope
 
-webmeetInfra is a standalone Ploinky repo for WebMeet runtime infrastructure agents: stack, Redis, Coturn, LiveKit Server, and LiveKit Egress.
+webmeetInfra is a standalone Ploinky repo for WebMeet runtime infrastructure agents: stack, Redis, Coturn, LiveKit Server, LiveKit Egress, LiveKit Nginx (TLS terminator, prod profile only), and LiveKit Certbot (Let's Encrypt cert renewal, prod profile only).
 
 ## Mandatory Reading Order
 
@@ -39,6 +39,8 @@ Infrastructure agents are started by Ploinky as dependencies of WebMeet. They ow
 - `webmeetCoturn/manifest.json`
 - `webmeetLivekitServer/manifest.json`
 - `webmeetLivekitEgress/manifest.json`
+- `webmeetLivekitNginx/manifest.json`
+- `webmeetLivekitCertbot/manifest.json`
 
 ## Validation
 
