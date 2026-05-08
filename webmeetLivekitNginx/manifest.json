@@ -5,7 +5,8 @@
         "mode": "host"
     },
     "enable": [
-        "webmeetInfra/webmeetLivekitServer"
+        "webmeetInfra/webmeetLivekitServer",
+        "webmeetInfra/webmeetLivekitCertbot"
     ],
     "start": "/code/start.sh",
     "volumes": {
@@ -25,66 +26,6 @@
         }
     },
     "profiles": {
-        "default": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "env": [
-                {
-                    "name": "WEBMEET_NGINX_VERSION",
-                    "required": false,
-                    "default": "1.27-alpine"
-                },
-                {
-                    "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
-                },
-                {
-                    "name": "WEBMEET_TLS_HTTPS_PORT",
-                    "required": false,
-                    "default": "443"
-                },
-                {
-                    "name": "WEBMEET_TLS_HTTP_PORT",
-                    "required": false,
-                    "default": "80"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_UPSTREAM",
-                    "required": false,
-                    "default": "http://127.0.0.1:7880"
-                }
-            ],
-            "ports": ["80:80", "443:443"]
-        },
-        "dev": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "env": [
-                {
-                    "name": "WEBMEET_NGINX_VERSION",
-                    "required": false,
-                    "default": "1.27-alpine"
-                },
-                {
-                    "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
-                },
-                {
-                    "name": "WEBMEET_TLS_HTTPS_PORT",
-                    "required": false,
-                    "default": "18443"
-                },
-                {
-                    "name": "WEBMEET_TLS_HTTP_PORT",
-                    "required": false,
-                    "default": "18080"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_UPSTREAM",
-                    "required": false,
-                    "default": "http://127.0.0.1:7880"
-                }
-            ],
-            "ports": ["18080:18080", "18443:18443"]
-        },
         "prod": {
             "preinstall": "scripts/hooks/preinstall.sh",
             "env": [

@@ -9,5 +9,12 @@
         "webmeetInfra/webmeetCoturn",
         "webmeetInfra/webmeetLivekitServer",
         "webmeetInfra/webmeetLivekitEgress"
-    ]
+    ],
+    "profiles": {
+        "prod": {
+            "enable": [
+                "webmeetInfra/webmeetLivekitNginx"
+            ]
+        }
+    }
 }

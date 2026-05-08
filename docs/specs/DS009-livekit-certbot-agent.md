@@ -16,7 +16,7 @@ Documents the `webmeetLivekitCertbot` agent. It owns the Let's Encrypt cert life
 
 The agent runs `certbot/certbot:${WEBMEET_CERTBOT_VERSION}` with `entrypoint: "/bin/sh"` and a generated `start.sh`. The entrypoint override is required because the upstream image's default entrypoint is `["certbot"]`, which would interpret a script path as a CLI subcommand. The `entrypoint` manifest field is a Ploinky runtime feature documented in the Ploinky DS003 spec.
 
-It runs with `network.mode: "host"`. The agent does not bind any ports of its own; host networking is used only because the ACME HTTP-01 challenge response file must be visible at the same `webroot` path that the nginx agent reads from. Both agents share that volume regardless of network mode.
+It runs with `network.mode: "host"`. The agent does not bind any ports of its own; host networking is used only because the ACME HTTP-01 challenge response file must be visible at the same `webroot` path that the nginx agent reads from. Both agents share that volume regardless of network mode. The manifest declares `readiness.protocol: "none"` so the Ploinky readiness gate treats the worker as immediately ready instead of probing a port the agent never binds (see Ploinky DS007).
 
 The agent shares two volumes with `webmeetLivekitNginx` (DS008):
 

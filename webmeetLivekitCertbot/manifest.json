@@ -5,10 +5,10 @@
         "mode": "host"
     },
     "entrypoint": "/bin/sh",
-    "enable": [
-        "webmeetInfra/webmeetLivekitNginx"
-    ],
     "start": "/code/start.sh",
+    "readiness": {
+        "protocol": "none"
+    },
     "volumes": {
         ".ploinky/data/webmeetTls/letsencrypt": "/etc/letsencrypt",
         ".ploinky/data/webmeetTls/webroot": "/var/www/certbot",
@@ -21,64 +21,6 @@
         }
     },
     "profiles": {
-        "default": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "env": [
-                {
-                    "name": "WEBMEET_CERTBOT_VERSION",
-                    "required": false,
-                    "default": "v3.1.0"
-                },
-                {
-                    "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
-                },
-                {
-                    "name": "WEBMEET_CERT_EMAIL",
-                    "required": false,
-                    "default": ""
-                },
-                {
-                    "name": "WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS",
-                    "required": false,
-                    "default": "43200"
-                },
-                {
-                    "name": "WEBMEET_CERTBOT_AUTO_ISSUE",
-                    "required": false,
-                    "default": "false"
-                }
-            ]
-        },
-        "dev": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "env": [
-                {
-                    "name": "WEBMEET_CERTBOT_VERSION",
-                    "required": false,
-                    "default": "v3.1.0"
-                },
-                {
-                    "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
-                },
-                {
-                    "name": "WEBMEET_CERT_EMAIL",
-                    "required": false,
-                    "default": ""
-                },
-                {
-                    "name": "WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS",
-                    "required": false,
-                    "default": "43200"
-                },
-                {
-                    "name": "WEBMEET_CERTBOT_AUTO_ISSUE",
-                    "required": false,
-                    "default": "false"
-                }
-            ]
-        },
         "prod": {
             "preinstall": "scripts/hooks/preinstall.sh",
             "env": [
