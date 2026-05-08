@@ -2,8 +2,7 @@
     "container": "docker.io/livekit/livekit-server:latest",
     "about": "LiveKit SFU for WebMeet rooms.",
     "network": {
-        "name": "webmeet",
-        "aliases": ["webmeetLivekitServer"]
+        "mode": "host"
     },
     "enable": [
         "webmeetInfra/webmeetRedis"
@@ -54,8 +53,7 @@
                     "required": false,
                     "default": "false"
                 }
-            ],
-            "ports": ["7880:7880", "7881:7881", "7882-7892:7882-7892/udp"]
+            ]
         },
         "dev": {
             "preinstall": "scripts/hooks/preinstall.sh",
@@ -92,8 +90,7 @@
                     "required": false,
                     "default": "false"
                 }
-            ],
-            "ports": ["17880:7880", "17881:17881", "17882-17892:17882-17892/udp"]
+            ]
         },
         "prod": {
             "preinstall": "scripts/hooks/preinstall.sh",
@@ -134,8 +131,7 @@
                     "required": false,
                     "default": "false"
                 }
-            ],
-            "ports": ["0.0.0.0:7880:7880", "0.0.0.0:7881:7881", "0.0.0.0:7882-7892:7882-7892/udp"]
+            ]
         }
     }
 }

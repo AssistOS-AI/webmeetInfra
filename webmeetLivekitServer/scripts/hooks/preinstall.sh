@@ -12,6 +12,7 @@ use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-false}"
 node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
 log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
 force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
+redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"
 
 rtc_tcp_port=7881
 rtc_port_range_start=7882
@@ -41,7 +42,7 @@ EOF
 fi
 cat >> "${agent_dir}/livekit.yaml" <<EOF
 redis:
-  address: webmeetRedis:6379
+  address: ${redis_address}
 keys:
   ${api_key}: ${api_secret}
 EOF
