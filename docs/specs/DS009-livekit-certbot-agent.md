@@ -30,7 +30,7 @@ The renewal loop (generated `start.sh`) reads the following env vars:
 - `WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS` (default `43200` = 12h) — sleep between renew attempts. Renewals are no-ops outside the 30-day-from-expiry window, so a 12h cadence is safe and self-throttling.
 - `WEBMEET_CERTBOT_AUTO_ISSUE` (default `false`) — when `true`, the agent will issue a new cert on first run if `/etc/letsencrypt/live/<host>/` is missing. When `false`, the agent only renews an already-issued cert. This flag is a guard against accidental ACME registration during initial cutovers; operators must explicitly opt in.
 
-The renewal flow uses HTTP-01 with `--webroot --webroot-path /var/www/certbot`. The nginx agent must be running and serving `${WEBMEET_TLS_HTTP_PORT}` for the challenge to complete. The operator-facing implication is that the nginx agent must reach steady state before the certbot agent's first auto-issue attempt can succeed.
+First-time issuance uses `--standalone` (certbot binds `:80` itself for the duration of the ACME HTTP-01 challenge), and renewals use `--webroot --webroot-path /var/www/certbot` once the nginx agent is running and answering on `:80`. This split avoids the bootstrap deadlock where the nginx agent waits for a cert that does not yet exist while certbot waits for nginx to serve the challenge — on first run, certbot owns `:80` briefly, issues the cert, exits standalone mode, and the nginx agent then starts and binds `:80` for renewal-time webroot challenges.
 
 The agent does not push anything into the running nginx process. The nginx agent watches the cert file in the shared volume and runs `nginx -s reload` on rotation, which keeps the cross-container contract one-way: certbot writes, nginx reads.
 

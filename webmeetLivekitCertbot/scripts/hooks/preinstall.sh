@@ -26,9 +26,9 @@ if [ ! -d "$LIVE_DIR" ]; then
       echo "[certbot-agent] WEBMEET_CERTBOT_AUTO_ISSUE=true requires WEBMEET_CERT_EMAIL"
       exit 1
     fi
-    echo "[certbot-agent] no cert at ${LIVE_DIR}; issuing via HTTP-01 webroot challenge"
+    echo "[certbot-agent] no cert at ${LIVE_DIR}; issuing via standalone HTTP-01 (binds :80 briefly)"
     certbot certonly \
-      --webroot -w "$WEBROOT" \
+      --standalone \
       -d "$HOST" \
       --email "$EMAIL" \
       --agree-tos \
@@ -41,7 +41,7 @@ fi
 
 while true; do
   if [ -d "$LIVE_DIR" ]; then
-    echo "[certbot-agent] running renew (will be a no-op until <30 days from expiry)"
+    echo "[certbot-agent] running renew via webroot (no-op until <30 days from expiry)"
     certbot renew \
       --webroot --webroot-path "$WEBROOT" \
       --no-random-sleep-on-renew || true
