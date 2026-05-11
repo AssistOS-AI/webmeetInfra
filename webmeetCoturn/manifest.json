@@ -1,12 +1,17 @@
 {
     "container": "docker.io/coturn/coturn:4.6.2",
     "about": "TURN/STUN server for WebMeet connectivity.",
-    "start": "sh -lc ': \"${WEBMEET_TURN_EXTERNAL_IP:?WEBMEET_TURN_EXTERNAL_IP is required}\"; : \"${WEBMEET_TURN_PASSWORD:?WEBMEET_TURN_PASSWORD is required}\"; turnserver --no-cli --no-tls --no-dtls --listening-port=3478 --min-port=${WEBMEET_TURN_MIN_PORT:-20000} --max-port=${WEBMEET_TURN_MAX_PORT:-20010} --external-ip=${WEBMEET_TURN_EXTERNAL_IP} --realm=${WEBMEET_TURN_REALM:-webmeet.local} --fingerprint --lt-cred-mech --user=${WEBMEET_TURN_USER:-webmeet}:${WEBMEET_TURN_PASSWORD}'",
+    "start": "sh -lc 'external_ip=\"${WEBMEET_TURN_EXTERNAL_IP:-auto}\"; : \"${WEBMEET_TURN_PASSWORD:?WEBMEET_TURN_PASSWORD is required}\"; if [ \"$external_ip\" = \"auto\" ]; then turn_host=\"${WEBMEET_TURN_HOST:-}\"; : \"${turn_host:?WEBMEET_TURN_HOST is required when WEBMEET_TURN_EXTERNAL_IP=auto}\"; resolved=\"$(getent ahostsv4 \"$turn_host\" 2>/dev/null | head -n 1 || true)\"; set -- $resolved; external_ip=\"${1:-}\"; if [ -z \"$external_ip\" ]; then echo \"[webmeetCoturn] failed to resolve WEBMEET_TURN_HOST=$turn_host\" >&2; exit 1; fi; fi; turnserver --no-cli --no-tls --no-dtls --listening-port=3478 --min-port=${WEBMEET_TURN_MIN_PORT:-20000} --max-port=${WEBMEET_TURN_MAX_PORT:-20010} --external-ip=${external_ip} --realm=${WEBMEET_TURN_REALM:-webmeet.local} --fingerprint --lt-cred-mech --user=${WEBMEET_TURN_USER:-webmeet}:${WEBMEET_TURN_PASSWORD}'",
     "profiles": {
         "default": {
             "env": [
                 {
                     "name": "WEBMEET_TURN_EXTERNAL_IP",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
+                    "name": "WEBMEET_TURN_HOST",
                     "required": false,
                     "default": "127.0.0.1"
                 },
@@ -49,6 +54,11 @@
                     "default": "127.0.0.1"
                 },
                 {
+                    "name": "WEBMEET_TURN_HOST",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
                     "name": "WEBMEET_TURN_REALM",
                     "required": false,
                     "default": "webmeet.local"
@@ -83,12 +93,18 @@
             "env": [
                 {
                     "name": "WEBMEET_TURN_EXTERNAL_IP",
-                    "required": true
+                    "required": true,
+                    "default": "auto"
+                },
+                {
+                    "name": "WEBMEET_TURN_HOST",
+                    "required": true,
+                    "default": "livekit-skills.axiologic.dev"
                 },
                 {
                     "name": "WEBMEET_TURN_REALM",
                     "required": false,
-                    "default": "webmeet.local"
+                    "default": "skills.axiologic.dev"
                 },
                 {
                     "name": "WEBMEET_TURN_USER",

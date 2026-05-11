@@ -36,7 +36,8 @@
                 },
                 {
                     "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
+                    "required": true,
+                    "default": "livekit-skills.axiologic.dev"
                 },
                 {
                     "name": "WEBMEET_TLS_HTTPS_PORT",

@@ -18,7 +18,7 @@ The `webmeetCoturn` agent owns TURN/STUN connectivity for WebMeet clients. Crede
 
 Production operators must review relay port exposure and external IP configuration before exposing the service beyond a local development host.
 
-Startup must require `WEBMEET_TURN_EXTERNAL_IP` and `WEBMEET_TURN_PASSWORD` instead of silently relying on command-line fallbacks. `WEBMEET_TURN_PASSWORD` is a workspace-owned agent secret and must be derived from `PLOINKY_DERIVED_MASTER_KEY` through manifest `derive: "derived-master"` entries using the shared TURN derivation identity; only deployment topology values such as external IP remain explicit operator configuration.
+Startup must require a concrete TURN external address and `WEBMEET_TURN_PASSWORD` instead of silently relying on command-line fallbacks. `WEBMEET_TURN_PASSWORD` is a workspace-owned agent secret and must be derived from `PLOINKY_DERIVED_MASTER_KEY` through manifest `derive: "derived-master"` entries using the shared TURN derivation identity. Deployment topology values are non-sensitive profile config without hard-coded public IPs: the production profile uses `WEBMEET_TURN_EXTERNAL_IP=auto` plus `WEBMEET_TURN_HOST=livekit-skills.axiologic.dev`, and the coturn start command resolves that hostname to the IP passed to `turnserver --external-ip`. Operators may override `WEBMEET_TURN_EXTERNAL_IP` through Ploinky vars when DNS-based resolution is unsuitable.
 
 ## Decisions & Questions
 

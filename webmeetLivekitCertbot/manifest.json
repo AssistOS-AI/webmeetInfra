@@ -31,11 +31,13 @@
                 },
                 {
                     "name": "WEBMEET_TLS_HOSTNAME",
-                    "required": true
+                    "required": true,
+                    "default": "livekit-skills.axiologic.dev"
                 },
                 {
                     "name": "WEBMEET_CERT_EMAIL",
-                    "required": true
+                    "required": true,
+                    "default": "admin@axiologic.dev"
                 },
                 {
                     "name": "WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS",

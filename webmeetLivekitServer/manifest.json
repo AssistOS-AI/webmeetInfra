@@ -4,12 +4,12 @@
     "enable": [
         "webmeetInfra/webmeetRedis"
     ],
-    "start": "--config /code/livekit.yaml",
+    "start": "--config /working-data/generated/livekit.yaml",
     "volumes": {
-        ".ploinky/agents/webmeetLivekitServer/livekit.yaml": "/code/livekit.yaml"
+        ".ploinky/agents/webmeetLivekitServer/livekit.yaml": "/working-data/generated/livekit.yaml"
     },
     "volumeOptions": {
-        "/code/livekit.yaml": {
+        "/working-data/generated/livekit.yaml": {
             "generated": true,
             "required": true
         }

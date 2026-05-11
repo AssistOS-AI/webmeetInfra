@@ -40,7 +40,7 @@ Agent-local contract:
 - Role: Ploinky infrastructure repository for WebMeet media services.
 - Authentication: Infrastructure services are enabled as dependencies and must not expose application guest or admin policy by themselves.
 - HTTP service surface: No infrastructure manifest declares public HTTP services; application-facing guest routes belong to webmeetAgent.
-- Persistent state: Generated LiveKit/Egress config, Redis runtime data, and recordings are runtime resources or volumes controlled by manifests.
+- Persistent state: Generated LiveKit/Egress config, Redis runtime data, and recordings are runtime resources or volumes controlled by manifests. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, and generated config belongs under `.ploinky/agents/<agent>/...`.
 - Documentation: `docs/index.html`
 - Validation: `ploinky start AchillesIDE/explorer` or `ploinky start AchillesIDE/webmeetAgent` smoke tests that verify the dependency graph starts.
 

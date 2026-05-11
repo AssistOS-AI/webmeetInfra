@@ -25,8 +25,8 @@ The agent shares two volumes with `webmeetLivekitNginx` (DS008):
 
 The renewal loop (generated `start.sh`) reads the following env vars:
 
-- `WEBMEET_TLS_HOSTNAME` (required) — the cert's primary domain.
-- `WEBMEET_CERT_EMAIL` (required when issuing a new cert) — Let's Encrypt account contact for ACME registration.
+- `WEBMEET_TLS_HOSTNAME` (required; default `livekit-skills.axiologic.dev`) — the cert's primary domain.
+- `WEBMEET_CERT_EMAIL` (required when issuing a new cert; default `admin@axiologic.dev`) — Let's Encrypt account contact for ACME registration.
 - `WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS` (default `43200` = 12h) — sleep between renew attempts. Renewals are no-ops outside the 30-day-from-expiry window, so a 12h cadence is safe and self-throttling.
 - `WEBMEET_CERTBOT_AUTO_ISSUE` (default `false`) — when `true`, the agent will issue a new cert on first run if `/etc/letsencrypt/live/<host>/` is missing. When `false`, the agent only renews an already-issued cert. This flag is a guard against accidental ACME registration during initial cutovers; operators must explicitly opt in.
 
