@@ -9,9 +9,11 @@ mkdir -p "$agent_dir"
 
 api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
 api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
-default_livekit_ws_url="ws://host.containers.internal:7880"
+default_livekit_ws_url="ws://webmeetLivekitServer:7880"
 if [[ "$profile" == "dev" ]]; then
-  default_livekit_ws_url="ws://host.containers.internal:17880"
+  default_livekit_ws_url="ws://webmeetLivekitServer:17880"
+elif [[ "$profile" == "prod" ]]; then
+  default_livekit_ws_url="ws://host.containers.internal:7880"
 fi
 livekit_ws_url="${WEBMEET_LIVEKIT_INTERNAL_WS_URL:-$default_livekit_ws_url}"
 redis_address="${WEBMEET_EGRESS_REDIS_ADDRESS:-webmeetRedis:6379}"

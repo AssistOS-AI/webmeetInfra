@@ -19,8 +19,8 @@ rtc_tcp_port=7881
 rtc_port_range_start=7882
 rtc_port_range_end=7892
 if [[ "$profile" == "dev" ]]; then
-  # Under host networking the manifest's "host:container" form is metadata only;
-  # LiveKit must bind the ports the readiness probe targets.
+  # Dev publishes the LiveKit ports under a 17xxx prefix to avoid colliding
+  # with a local default-profile run; LiveKit must bind the same ports.
   signal_port=17880
   rtc_tcp_port=17881
   rtc_port_range_start=17882

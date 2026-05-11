@@ -46,6 +46,16 @@
                     "deriveRepoName": "webmeet",
                     "deriveAgentName": "shared-livekit",
                     "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://webmeetLivekitServer:7880"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "webmeetRedis:6379"
                 }
             ],
             "ports": ["7980:7980"]
@@ -74,6 +84,16 @@
                     "deriveRepoName": "webmeet",
                     "deriveAgentName": "shared-livekit",
                     "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://webmeetLivekitServer:17880"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "webmeetRedis:6379"
                 }
             ],
             "ports": ["17980:7980"]
@@ -102,6 +122,16 @@
                     "deriveRepoName": "webmeet",
                     "deriveAgentName": "shared-livekit",
                     "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://host.containers.internal:7880"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "webmeetRedis:6379"
                 }
             ],
             "ports": ["7980:7980"]
