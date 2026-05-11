@@ -6,7 +6,7 @@ TURN/STUN connectivity service for WebMeet clients.
 
 ## Mandatory Reading Order
 
-1. Read the nearest parent `AGENTS.md` for workspace-wide rules.
+1. Read the nearest parent `AGENTS.md` for workspace-wide rules. 
 2. Read `../docs/index.html` for the local documentation entry point.
 3. Read `../docs/specs/matrix.md` and the relevant local DS files before changing behavior.
 4. Read `../docs/specs/DS007-ploinky-runtime-invariants.md` before touching auth, routing, guest access, MCP, HTTP services, files, logs, or runtime configuration.
