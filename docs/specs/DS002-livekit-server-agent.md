@@ -107,6 +107,32 @@ agent that the consumer's manifest enables.
 | dev      | bridge `webmeet`| 127.0.0.1:17000    | 127.0.0.1:17880   | `http://liveKitServerAgent:17880`, `:7980` |
 | prod     | host networking | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://host.containers.internal:7880`/`:7980` |
 
+### WebMeet integration boundary
+
+`liveKitServerAgent` owns the media-runtime services only. `webmeetAgent` owns
+rooms, invite tokens, participant membership, chat, transcripts, artifacts, AI
+dispatch metadata, recording commands, and LiveKit participant JWT issuance.
+The shared boundary is intentionally narrow:
+
+- Browsers connect to LiveKit through `WEBMEET_PUBLIC_LIVEKIT_URL`, which is a
+  local `ws://127.0.0.1:<signaling-port>` URL in default/dev profiles and the
+  production `wss://` signaling hostname in prod.
+- `webmeetAgent` calls LiveKit RoomService, AgentDispatchService, and Egress
+  Twirp APIs through `WEBMEET_LIVEKIT_URL`, using
+  `http://liveKitServerAgent:7880` in default,
+  `http://liveKitServerAgent:17880` in dev, and
+  `http://host.containers.internal:7880` in prod.
+- LiveKit Egress uses the generated `ws_url` in
+  `.ploinky/agents/liveKitServerAgent/egress.yaml` to join rooms as the
+  recorder worker and writes MP4 files to the shared
+  `.ploinky/data/webmeet/recordings` volume.
+- Redis is LiveKit and Egress runtime coordination state. It is not the
+  WebMeet application database, room-discovery source, chat store, transcript
+  store, or artifact store.
+- Guest authorization, admin checks, room visibility, and recording policy
+  stay in `webmeetAgent`; this infrastructure agent must not duplicate those
+  policies or expose guest-facing HTTP routes.
+
 ## Decisions & Questions
 
 ### Question #1: Why is the manifest `agent` command a shell script instead of a more declarative supervisor (s6, runit, systemd)?
