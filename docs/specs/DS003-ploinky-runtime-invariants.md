@@ -1,12 +1,12 @@
 ---
-id: DS007
+id: DS003
 title: Ploinky Runtime Invariants
 status: implemented
 owner: webmeet-infra-team
 summary: Captures the Ploinky routing, authentication, guest, secure-wire, sandbox, and documentation invariants that must remain in local context when changing this agent.
 ---
 
-# DS007 - Ploinky Runtime Invariants
+# DS003 - Ploinky Runtime Invariants
 
 ## Introduction
 
@@ -36,13 +36,14 @@ Logs and user-facing errors must not expose secrets, cookies, bearer tokens, inv
 
 Agent-local contract:
 
-- Manifest: `webmeetInfra/*/manifest.json`
-- Role: Ploinky infrastructure repository for WebMeet media services.
-- Authentication: Infrastructure services are enabled as dependencies and must not expose application guest or admin policy by themselves.
-- HTTP service surface: No infrastructure manifest declares public HTTP services; application-facing guest routes belong to webmeetAgent.
-- Persistent state: Generated LiveKit/Egress config, Redis runtime data, and recordings are runtime resources or volumes controlled by manifests. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, and generated config belongs under `.ploinky/agents/<agent>/...`.
+- Manifest: `webmeetInfra/liveKitServerAgent/manifest.json`
+- Role: Single Ploinky agent that supervises the WebMeet media runtime.
+- Authentication: The agent runs as a dependency of `webmeetAgent` / `webmeetLivekitAiAgent` and must not expose application guest or admin policy by itself.
+- HTTP service surface: No infrastructure manifest declares public HTTP services; application-facing guest routes belong to `webmeetAgent`.
+- Persistent state: Generated LiveKit/Egress/Redis/Coturn/Nginx config and the in-container supervisor are runtime resources controlled by the manifest. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, durable Redis state under `.ploinky/data/webmeet/redis`, TLS state under `.ploinky/data/webmeetTls/...`, and generated config under `.ploinky/agents/liveKitServerAgent/...`.
 - Documentation: `docs/index.html`
-- Validation: `ploinky start AchillesIDE/explorer` or `ploinky start AchillesIDE/webmeetAgent` smoke tests that verify the dependency graph starts.
+- Validation: `ploinky start AchillesIDE/webmeetAgent` plus `ploinky status` confirm the consolidated agent reports ready.
+- Supervisor scope: `scripts/start-livekit-server-agent.sh` may only manage processes installed inside this image. It must not invoke `ploinky` or otherwise try to start sibling agents, because Ploinky resolves `enable` edges before the container is created.
 
 ## Decisions & Questions
 

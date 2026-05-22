@@ -8,7 +8,7 @@ id: DS000
 title: WebMeet Infra Vision
 status: implemented
 owner: webmeet-infra-team
-summary: Defines webmeetInfra as a Ploinky repository of reusable media infrastructure agents for WebMeet.
+summary: Defines webmeetInfra as the Ploinky repository whose runtime is delivered by the single liveKitServerAgent.
 ---
 
 
@@ -22,16 +22,16 @@ summary: Defines webmeetInfra as a Ploinky repository of reusable media infrastr
 <a id="chapter-chapter-f62db1df-df79-483b-b869-c7894c1ab0d4"></a>
 ## Introduction
 <!-- {"achilles-ide-paragraph":{"id":"paragraph-5c738fe4-20de-4723-8b18-9814d58d95c2","type":"markdown","title":"Paragraph 1"}} -->
-Defines webmeetInfra as a Ploinky repository of reusable media infrastructure agents for WebMeet. 
+webmeetInfra is the Ploinky repository that owns the WebMeet media runtime. The runtime is delivered by one Ploinky agent, `liveKitServerAgent`, which supervises Redis, Coturn, LiveKit Server, LiveKit Egress, and (in the `prod` profile) the Nginx TLS terminator plus a Certbot renewal loop inside one container.
 
 
 <!-- {"achilles-ide-chapter":{"id":"chapter-aaf44b47-7186-4ae2-b9b1-752b68609843","title":"Core Content","anchorId":"chapter-chapter-aaf44b47-7186-4ae2-b9b1-752b68609843"}} -->
 <a id="chapter-chapter-aaf44b47-7186-4ae2-b9b1-752b68609843"></a>
 ## Core Content
 <!-- {"achilles-ide-paragraph":{"id":"paragraph-7cff1830-24f5-4a71-9a27-512a255fa12a","type":"markdown","title":"Paragraph 1"}} -->
-webmeetInfra exists to keep WebMeet media infrastructure separate from the application-facing WebMeet agent. The repository owns Redis, TURN/STUN, LiveKit server, LiveKit egress, and a stack dependency bundle so Ploinky can start the media stack through normal agent dependency resolution.
+webmeetInfra must remain an infrastructure repository. It owns Redis, TURN/STUN, LiveKit Server, LiveKit Egress, the Nginx TLS terminator, and the Certbot renewal loop, all supervised by `liveKitServerAgent` inside one container. It must not own WebMeet room business logic, guest invite validation, Explorer UI behavior, or meeting artifact policy. Those contracts belong to `webmeetAgent`.
 
-The repository must remain an infrastructure repository. It must not own WebMeet room business logic, guest invite validation, Explorer UI behavior, or meeting artifact policy. Those contracts belong to webmeetAgent.
+The runtime image is published to Docker Hub as `assistos/livekit-server-agent:webmeet-infra` through a manual `workflow_dispatch` GitHub Actions workflow. Publishing requires the `DOCKERHUB_TOKEN` repository secret; token values are never committed to this repo.
 
 
 <!-- {"achilles-ide-chapter":{"id":"chapter-5674c374-0ab2-4f02-a942-5ae094261751","title":"Decisions & Questions","anchorId":"chapter-chapter-5674c374-0ab2-4f02-a942-5ae094261751"}} -->

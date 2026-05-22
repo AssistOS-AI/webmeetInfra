@@ -1,0 +1,427 @@
+{
+    "container": "docker.io/assistos/livekit-server-agent:${WEBMEET_INFRA_IMAGE_TAG}",
+    "about": "WebMeet media runtime: Redis, Coturn, LiveKit Server, LiveKit Egress, plus Nginx and Certbot in the prod profile, supervised inside one container.",
+    "agent": "sh /code/scripts/start-livekit-server-agent.sh",
+    "readiness": {
+        "protocol": "tcp"
+    },
+    "containerSecurity": {
+        "privileged": false
+    },
+    "volumes": {
+        ".ploinky/agents/liveKitServerAgent": "/working-data/generated",
+        ".ploinky/data/webmeet/redis": "/data/redis",
+        ".ploinky/data/webmeet/recordings": "/data/recordings",
+        ".ploinky/data/webmeetTls/letsencrypt": "/etc/letsencrypt",
+        ".ploinky/data/webmeetTls/webroot": "/var/www/certbot"
+    },
+    "volumeOptions": {
+        "/working-data/generated": { "generated": true, "required": true }
+    },
+    "profiles": {
+        "default": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "network": {
+                "name": "webmeet",
+                "aliases": [
+                    "liveKitServerAgent"
+                ]
+            },
+            "ports": [
+                "127.0.0.1:17000:17000",
+                "127.0.0.1:7880:7880",
+                "127.0.0.1:7881:7881",
+                "127.0.0.1:7882-7892:7882-7892/udp",
+                "127.0.0.1:7980:7980",
+                "127.0.0.1:6379:6379",
+                "127.0.0.1:3478:3478/tcp",
+                "127.0.0.1:3478:3478/udp",
+                "127.0.0.1:20000-20010:20000-20010/udp"
+            ],
+            "env": [
+                {
+                    "name": "WEBMEET_INFRA_IMAGE_TAG",
+                    "required": false,
+                    "default": "webmeet-infra"
+                },
+                {
+                    "name": "WEBMEET_INFRA_HEALTH_PORT",
+                    "required": false,
+                    "default": "17000"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
+                    "required": false,
+                    "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://127.0.0.1:7880"
+                },
+                {
+                    "name": "WEBMEET_TURN_EXTERNAL_IP",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
+                    "name": "WEBMEET_TURN_HOST",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
+                    "name": "WEBMEET_TURN_PORT",
+                    "required": false,
+                    "default": "3478"
+                },
+                {
+                    "name": "WEBMEET_TURN_REALM",
+                    "required": false,
+                    "default": "webmeet.local"
+                },
+                {
+                    "name": "WEBMEET_TURN_USER",
+                    "required": false,
+                    "default": "webmeet"
+                },
+                {
+                    "name": "WEBMEET_TURN_PASSWORD",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
+                },
+                {
+                    "name": "WEBMEET_TURN_MIN_PORT",
+                    "required": false,
+                    "default": "20000"
+                },
+                {
+                    "name": "WEBMEET_TURN_MAX_PORT",
+                    "required": false,
+                    "default": "20010"
+                }
+            ]
+        },
+        "dev": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "network": {
+                "name": "webmeet",
+                "aliases": [
+                    "liveKitServerAgent"
+                ]
+            },
+            "ports": [
+                "127.0.0.1:17000:17000",
+                "127.0.0.1:17880:17880",
+                "127.0.0.1:17881:17881",
+                "127.0.0.1:17882-17892:17882-17892/udp",
+                "127.0.0.1:17980:7980",
+                "127.0.0.1:16379:6379",
+                "127.0.0.1:13478:3478/tcp",
+                "127.0.0.1:13478:3478/udp",
+                "127.0.0.1:20000-20010:20000-20010/udp"
+            ],
+            "env": [
+                {
+                    "name": "WEBMEET_INFRA_IMAGE_TAG",
+                    "required": false,
+                    "default": "webmeet-infra"
+                },
+                {
+                    "name": "WEBMEET_INFRA_HEALTH_PORT",
+                    "required": false,
+                    "default": "17000"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
+                    "required": false,
+                    "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://127.0.0.1:17880"
+                },
+                {
+                    "name": "WEBMEET_TURN_EXTERNAL_IP",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
+                    "name": "WEBMEET_TURN_HOST",
+                    "required": false,
+                    "default": "127.0.0.1"
+                },
+                {
+                    "name": "WEBMEET_TURN_PORT",
+                    "required": false,
+                    "default": "3478"
+                },
+                {
+                    "name": "WEBMEET_TURN_REALM",
+                    "required": false,
+                    "default": "webmeet.local"
+                },
+                {
+                    "name": "WEBMEET_TURN_USER",
+                    "required": false,
+                    "default": "webmeet"
+                },
+                {
+                    "name": "WEBMEET_TURN_PASSWORD",
+                    "required": false,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
+                },
+                {
+                    "name": "WEBMEET_TURN_MIN_PORT",
+                    "required": false,
+                    "default": "20000"
+                },
+                {
+                    "name": "WEBMEET_TURN_MAX_PORT",
+                    "required": false,
+                    "default": "20010"
+                }
+            ]
+        },
+        "prod": {
+            "preinstall": "scripts/hooks/preinstall.sh",
+            "network": {
+                "mode": "host"
+            },
+            "ports": [
+                "127.0.0.1:17000:17000",
+                "0.0.0.0:7880:7880",
+                "0.0.0.0:7881:7881",
+                "0.0.0.0:7882-7892:7882-7892/udp",
+                "127.0.0.1:7980:7980",
+                "127.0.0.1:6379:6379",
+                "0.0.0.0:3478:3478/tcp",
+                "0.0.0.0:3478:3478/udp",
+                "0.0.0.0:20000-20010:20000-20010/udp",
+                "0.0.0.0:80:80",
+                "0.0.0.0:443:443"
+            ],
+            "env": [
+                {
+                    "name": "WEBMEET_INFRA_IMAGE_TAG",
+                    "required": false,
+                    "default": "webmeet-infra"
+                },
+                {
+                    "name": "WEBMEET_INFRA_HEALTH_PORT",
+                    "required": false,
+                    "default": "17000"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_KEY",
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-key",
+                    "deriveBytes": 16
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_API_SECRET",
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-livekit",
+                    "deriveName": "api-secret"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
+                    "required": false,
+                    "default": "true"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_NODE_IP",
+                    "required": false
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
+                    "required": false,
+                    "default": "info"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
+                    "required": false,
+                    "default": "false"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
+                    "required": false,
+                    "default": "127.0.0.1:6379"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
+                    "required": false,
+                    "default": "ws://127.0.0.1:7880"
+                },
+                {
+                    "name": "WEBMEET_TURN_EXTERNAL_IP",
+                    "required": false,
+                    "default": "auto"
+                },
+                {
+                    "name": "WEBMEET_TURN_HOST",
+                    "required": true,
+                    "default": "livekit-skills.axiologic.dev"
+                },
+                {
+                    "name": "WEBMEET_TURN_PORT",
+                    "required": false,
+                    "default": "3478"
+                },
+                {
+                    "name": "WEBMEET_TURN_REALM",
+                    "required": false,
+                    "default": "skills.axiologic.dev"
+                },
+                {
+                    "name": "WEBMEET_TURN_USER",
+                    "required": false,
+                    "default": "webmeet"
+                },
+                {
+                    "name": "WEBMEET_TURN_PASSWORD",
+                    "required": true,
+                    "derive": "derived-master",
+                    "deriveRepoName": "webmeet",
+                    "deriveAgentName": "shared-turn",
+                    "deriveName": "password"
+                },
+                {
+                    "name": "WEBMEET_TURN_MIN_PORT",
+                    "required": false,
+                    "default": "20000"
+                },
+                {
+                    "name": "WEBMEET_TURN_MAX_PORT",
+                    "required": false,
+                    "default": "20010"
+                },
+                {
+                    "name": "WEBMEET_TLS_HOSTNAME",
+                    "required": true,
+                    "default": "livekit-skills.axiologic.dev"
+                },
+                {
+                    "name": "WEBMEET_TLS_HTTP_PORT",
+                    "required": false,
+                    "default": "80"
+                },
+                {
+                    "name": "WEBMEET_TLS_HTTPS_PORT",
+                    "required": false,
+                    "default": "443"
+                },
+                {
+                    "name": "WEBMEET_LIVEKIT_UPSTREAM",
+                    "required": false,
+                    "default": "http://127.0.0.1:7880"
+                },
+                {
+                    "name": "WEBMEET_CERT_EMAIL",
+                    "required": false,
+                    "default": "admin@axiologic.dev"
+                },
+                {
+                    "name": "WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS",
+                    "required": false,
+                    "default": "43200"
+                },
+                {
+                    "name": "WEBMEET_CERTBOT_AUTO_ISSUE",
+                    "required": false,
+                    "default": "false"
+                }
+            ]
+        }
+    }
+}

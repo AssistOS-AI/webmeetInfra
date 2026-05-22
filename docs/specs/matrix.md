@@ -6,11 +6,13 @@ This page indexes the local design specification set. The DS files are the sourc
 
 - [DS000 - WebMeet Infra Vision](specsLoader.html?spec=DS000-vision.md)
 - [DS001 - Coding Style](specsLoader.html?spec=DS001-coding-style.md)
-- [DS002 - Stack Agent](specsLoader.html?spec=DS002-stack-agent.md)
-- [DS003 - LiveKit Server Agent](specsLoader.html?spec=DS003-livekit-server-agent.md)
-- [DS004 - LiveKit Egress Agent](specsLoader.html?spec=DS004-livekit-egress-agent.md)
-- [DS005 - Coturn Agent](specsLoader.html?spec=DS005-coturn-agent.md)
-- [DS006 - Redis Agent](specsLoader.html?spec=DS006-redis-agent.md)
-- [DS007 - Ploinky Runtime Invariants](specsLoader.html?spec=DS007-ploinky-runtime-invariants.md)
-- [DS008 - LiveKit Nginx Agent](specsLoader.html?spec=DS008-livekit-nginx-agent.md)
-- [DS009 - LiveKit Certbot Agent](specsLoader.html?spec=DS009-livekit-certbot-agent.md)
+- [DS002 - liveKitServerAgent](specsLoader.html?spec=DS002-livekit-server-agent.md)
+- [DS003 - Ploinky Runtime Invariants](specsLoader.html?spec=DS003-ploinky-runtime-invariants.md)
+
+## Runtime agent
+
+`liveKitServerAgent` is the only Ploinky agent in this repository. Consumers
+(`webmeetAgent`, `webmeetLivekitAiAgent`) enable it directly. The Docker image
+`assistos/livekit-server-agent:webmeet-infra` is published through the manual
+GitHub Actions workflow `publish-livekit-server-agent.yml` using the
+`DOCKERHUB_TOKEN` repository secret. The token value is never committed.
