@@ -23,9 +23,8 @@ only manage processes that already exist inside this image.
 assistos/livekit-server-agent:webmeet-infra
 ```
 
-The manifest references the image through `${WEBMEET_INFRA_IMAGE_TAG}` so
-operators can override the tag through `ploinky var WEBMEET_INFRA_IMAGE_TAG=…`
-without editing the manifest.
+The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
+directly as the default runtime image for every profile.
 
 The image is published through `.github/workflows/publish-livekit-server-agent.yml`
 (manual `workflow_dispatch` only). It uses the `DOCKERHUB_TOKEN` repository

@@ -1,5 +1,5 @@
 {
-    "container": "docker.io/assistos/livekit-server-agent:${WEBMEET_INFRA_IMAGE_TAG}",
+    "container": "docker.io/assistos/livekit-server-agent:webmeet-infra",
     "about": "WebMeet media runtime: Redis, Coturn, LiveKit Server, LiveKit Egress, plus Nginx and Certbot in the prod profile, supervised inside one container.",
     "agent": "sh /code/scripts/start-livekit-server-agent.sh",
     "readiness": {
@@ -39,11 +39,6 @@
                 "127.0.0.1:20000-20010:20000-20010/udp"
             ],
             "env": [
-                {
-                    "name": "WEBMEET_INFRA_IMAGE_TAG",
-                    "required": false,
-                    "default": "webmeet-infra"
-                },
                 {
                     "name": "WEBMEET_INFRA_HEALTH_PORT",
                     "required": false,
@@ -162,11 +157,6 @@
             ],
             "env": [
                 {
-                    "name": "WEBMEET_INFRA_IMAGE_TAG",
-                    "required": false,
-                    "default": "webmeet-infra"
-                },
-                {
                     "name": "WEBMEET_INFRA_HEALTH_PORT",
                     "required": false,
                     "default": "17000"
@@ -282,11 +272,6 @@
                 "0.0.0.0:443:443"
             ],
             "env": [
-                {
-                    "name": "WEBMEET_INFRA_IMAGE_TAG",
-                    "required": false,
-                    "default": "webmeet-infra"
-                },
                 {
                     "name": "WEBMEET_INFRA_HEALTH_PORT",
                     "required": false,

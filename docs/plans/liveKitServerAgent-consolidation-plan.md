@@ -248,8 +248,7 @@ Create `liveKitServerAgent/manifest.json` as the only enabled infra agent.
 
 Core manifest requirements:
 
-- `container`: `assistos/livekit-server-agent:${WEBMEET_INFRA_IMAGE_TAG}`
-- Default `WEBMEET_INFRA_IMAGE_TAG`: `webmeet-infra`
+- `container`: `docker.io/assistos/livekit-server-agent:webmeet-infra`
 - `agent`: `sh /code/scripts/start-livekit-server-agent.sh`
 - `readiness.protocol`: `tcp`
 - Health port first in each profile's `ports`, for example

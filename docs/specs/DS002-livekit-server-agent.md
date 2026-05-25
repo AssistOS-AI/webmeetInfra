@@ -19,9 +19,8 @@ container.
 
 ### Image and publishing
 
-The container image is `assistos/livekit-server-agent:webmeet-infra`. The
-manifest references the image through `${WEBMEET_INFRA_IMAGE_TAG}` so operators
-can override the tag through workspace vars without editing the manifest.
+The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
+directly. This tag is the default runtime image for every profile.
 
 The image is built and published by the manual GitHub Actions workflow
 `.github/workflows/publish-livekit-server-agent.yml`. The workflow is
