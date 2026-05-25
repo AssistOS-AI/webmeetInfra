@@ -29,7 +29,8 @@ without editing the manifest.
 
 The image is published through `.github/workflows/publish-livekit-server-agent.yml`
 (manual `workflow_dispatch` only). It uses the `DOCKERHUB_TOKEN` repository
-secret. Do not store the token in this repo.
+secret and publishes `linux/amd64` plus `linux/arm64` variants. Do not store
+the token in this repo.
 
 ## Files
 

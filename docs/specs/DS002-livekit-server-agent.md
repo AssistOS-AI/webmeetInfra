@@ -29,10 +29,10 @@ The image is built and published by the manual GitHub Actions workflow
 repository secret. The workflow publishes the raw `webmeet-infra` tag and an
 sha-prefixed `webmeet-infra-<sha>` tag through `docker/setup-buildx-action`,
 `docker/metadata-action`, and `docker/build-push-action` with
-`provenance: false`. Platforms start at `linux/amd64` because the upstream
-`livekit/egress` image does not currently publish a stable `linux/arm64`
-variant; the workflow may add `linux/arm64` once the upstream Egress image
-supports it.
+`provenance: false`. The workflow publishes a multi-architecture image for
+`linux/amd64` and `linux/arm64` so Apple Silicon/aarch64 Podman machines pull a
+native image instead of running Redis and the media stack through QEMU
+emulation.
 
 ### Supervised services
 
