@@ -44,9 +44,16 @@ the token in this repo.
 
 | Profile | Network                  | Health port (host) | LiveKit signaling | Consumer URL pattern                                |
 |---------|--------------------------|--------------------|-------------------|-----------------------------------------------------|
-| default | bridge `webmeet`         | 127.0.0.1:17000    | 127.0.0.1:7880    | `http://liveKitServerAgent:7880`, `:7980`           |
-| dev     | bridge `webmeet`         | 127.0.0.1:17000    | 127.0.0.1:17880   | `http://liveKitServerAgent:17880`, `:7980`          |
+| default | bridge `webmeet`         | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://liveKitServerAgent:7880`, `:7980`           |
+| dev     | bridge `webmeet`         | 127.0.0.1:17000    | 0.0.0.0:17880     | `http://liveKitServerAgent:17880`, `:7980`          |
 | prod    | host networking          | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://host.containers.internal:7880`/`:7980`      |
+
+Default and dev generated LiveKit config advertise the detected workstation
+IPv4 address as the SFU ICE node address unless `WEBMEET_LIVEKIT_NODE_IP` is
+explicitly set. `WEBMEET_LOCAL_PUBLIC_HOST` overrides detection. Browser-facing
+LiveKit media and TURN ports are intentionally LAN-published in these local
+profiles because Firefox on macOS/Podman does not reliably connect through
+loopback-only ICE candidates.
 
 Sibling bridge consumers reach the agent through the single network alias
 `liveKitServerAgent` in default/dev. In prod, the agent uses host networking

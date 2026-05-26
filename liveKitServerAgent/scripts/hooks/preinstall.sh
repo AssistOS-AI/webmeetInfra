@@ -14,6 +14,103 @@ mkdir -p \
     "$tls_dir/letsencrypt" \
     "$tls_dir/webroot"
 
+is_ipv4() {
+    printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+}
+
+is_loopback_host() {
+    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+        ''|localhost|127.*|::1|'[::1]')
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+host_from_url() {
+    printf '%s' "${1:-}" \
+        | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#/.*$##; s#^\[([^]]+)\].*$#\1#; s#:([0-9]+)$##'
+}
+
+is_loopback_url() {
+    is_loopback_host "$(host_from_url "$1")"
+}
+
+detect_local_public_host() {
+    local override="${WEBMEET_LOCAL_PUBLIC_HOST:-}"
+    local iface candidate
+    if [ -n "$override" ] && [ "$override" != "auto" ]; then
+        printf '%s\n' "$override"
+        return 0
+    fi
+
+    if command -v route >/dev/null 2>&1 && command -v ipconfig >/dev/null 2>&1; then
+        iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
+        if [ -n "$iface" ]; then
+            candidate="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        fi
+    fi
+
+    if command -v ipconfig >/dev/null 2>&1; then
+        for iface in en0 en1; do
+            candidate="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+    fi
+
+    if command -v ip >/dev/null 2>&1; then
+        candidate="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+        if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    fi
+
+    if command -v hostname >/dev/null 2>&1; then
+        for candidate in $(hostname -I 2>/dev/null || true); do
+            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+    fi
+
+    return 1
+}
+
+set_workspace_var() {
+    local name="$1" value="$2"
+    if command -v ploinky >/dev/null 2>&1; then
+        ploinky var "$name" "$value" >/dev/null
+    fi
+}
+
+seed_webmeet_browser_vars() {
+    local public_host="$1" signal="$2"
+    local current_livekit_url="${WEBMEET_PUBLIC_LIVEKIT_URL:-}"
+    local current_turn_external_ip="${WEBMEET_TURN_EXTERNAL_IP:-}"
+    local current_turn_host="${WEBMEET_TURN_HOST:-}"
+
+    if [ -z "$current_livekit_url" ] || is_loopback_url "$current_livekit_url"; then
+        set_workspace_var WEBMEET_PUBLIC_LIVEKIT_URL "ws://${public_host}:${signal}"
+    fi
+    if [ -z "$current_turn_external_ip" ] || is_loopback_host "$current_turn_external_ip"; then
+        set_workspace_var WEBMEET_TURN_EXTERNAL_IP "$public_host"
+    fi
+    if [ -z "$current_turn_host" ] || is_loopback_host "$current_turn_host"; then
+        set_workspace_var WEBMEET_TURN_HOST "$public_host"
+    fi
+}
+
 api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
 api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
 turn_password="${WEBMEET_TURN_PASSWORD:?WEBMEET_TURN_PASSWORD is required}"
@@ -21,6 +118,7 @@ log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
 force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
 use_external_ip_default="false"
 node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
+local_public_host="$(detect_local_public_host || true)"
 
 signal_port=7880
 rtc_tcp_port=7881
@@ -32,21 +130,49 @@ turn_min_port="${WEBMEET_TURN_MIN_PORT:-20000}"
 turn_max_port="${WEBMEET_TURN_MAX_PORT:-20010}"
 turn_realm="${WEBMEET_TURN_REALM:-webmeet.local}"
 turn_user="${WEBMEET_TURN_USER:-webmeet}"
-turn_external_ip="${WEBMEET_TURN_EXTERNAL_IP:-127.0.0.1}"
-turn_host="${WEBMEET_TURN_HOST:-127.0.0.1}"
+turn_external_ip="${WEBMEET_TURN_EXTERNAL_IP:-}"
+turn_host="${WEBMEET_TURN_HOST:-}"
 
 case "$profile" in
+    default)
+        local_public_host="${local_public_host:-127.0.0.1}"
+        if [ -z "$node_ip" ] || is_loopback_host "$node_ip"; then
+            node_ip="$local_public_host"
+        fi
+        if [ -z "$turn_external_ip" ] || is_loopback_host "$turn_external_ip"; then
+            turn_external_ip="$local_public_host"
+        fi
+        if [ -z "$turn_host" ] || is_loopback_host "$turn_host"; then
+            turn_host="$local_public_host"
+        fi
+        seed_webmeet_browser_vars "$local_public_host" "$signal_port"
+        ;;
     dev)
         signal_port=17880
         rtc_tcp_port=17881
         rtc_port_range_start=17882
         rtc_port_range_end=17892
-        node_ip="${node_ip:-127.0.0.1}"
+        local_public_host="${local_public_host:-127.0.0.1}"
+        if [ -z "$node_ip" ] || is_loopback_host "$node_ip"; then
+            node_ip="$local_public_host"
+        fi
+        if [ -z "$turn_external_ip" ] || is_loopback_host "$turn_external_ip"; then
+            turn_external_ip="$local_public_host"
+        fi
+        if [ -z "$turn_host" ] || is_loopback_host "$turn_host"; then
+            turn_host="$local_public_host"
+        fi
+        seed_webmeet_browser_vars "$local_public_host" "$signal_port"
         ;;
     prod)
         use_external_ip_default="true"
+        turn_external_ip="${turn_external_ip:-auto}"
+        turn_host="${turn_host:-livekit-skills.axiologic.dev}"
         ;;
 esac
+
+turn_external_ip="${turn_external_ip:-127.0.0.1}"
+turn_host="${turn_host:-127.0.0.1}"
 
 use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-$use_external_ip_default}"
 redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"

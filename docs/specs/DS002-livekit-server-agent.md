@@ -48,7 +48,11 @@ order, blocking on TCP readiness between steps:
    from `WEBMEET_TURN_HOST` when `WEBMEET_TURN_EXTERNAL_IP=auto`.
 3. LiveKit Server (`livekit-server`) using the generated
    `/working-data/generated/livekit.yaml`, listening on the profile-appropriate
-   signaling port (`7880` for default/prod, `17880` for dev).
+   signaling port (`7880` for default/prod, `17880` for dev). Default and dev
+   profiles detect the workstation IPv4 address unless
+   `WEBMEET_LOCAL_PUBLIC_HOST` or `WEBMEET_LIVEKIT_NODE_IP` is set, so browser
+   ICE candidates point at host-published media ports instead of the
+   bridge-container address.
 4. LiveKit Egress (`egress`) using `EGRESS_CONFIG_FILE` pointing at the
    generated `/working-data/generated/egress.yaml`, then waits for the
    configured Egress health port.
@@ -81,7 +85,13 @@ if any required service (`redis-server`, `turnserver`, `livekit-server`,
   profile may generate hard-coded development credentials.
 - Default and dev profiles use the bridge network `webmeet` with the alias
   `liveKitServerAgent`. Consumers reach LiveKit at `liveKitServerAgent:7880`
-  (or `:17880` in dev) and Egress at `liveKitServerAgent:7980`.
+  (or `:17880` in dev) and Egress at `liveKitServerAgent:7980`. Browser-facing
+  LiveKit signaling, media, and TURN ports are intentionally published on
+  `0.0.0.0` for these local profiles while Redis, Egress health, and the
+  supervisor health port remain loopback-only. The SFU and Coturn advertise the
+  detected workstation IPv4 address so Firefox on macOS/Podman can form usable
+  ICE pairs; loopback-only candidates are not reliable in that browser/runtime
+  combination.
 - The `prod` profile uses `network.mode: "host"` to preserve LiveKit's UDP
   WebRTC path and to give Nginx direct ownership of ports 80/443. Sibling
   bridge consumers reach the runtime through `host.containers.internal` in prod.
@@ -102,9 +112,18 @@ agent that the consumer's manifest enables.
 
 | Profile  | Network         | Health port (host) | LiveKit signaling | Consumer URL pattern                       |
 |----------|-----------------|--------------------|-------------------|--------------------------------------------|
-| default  | bridge `webmeet`| 127.0.0.1:17000    | 127.0.0.1:7880    | `http://liveKitServerAgent:7880`, `:7980`  |
-| dev      | bridge `webmeet`| 127.0.0.1:17000    | 127.0.0.1:17880   | `http://liveKitServerAgent:17880`, `:7980` |
+| default  | bridge `webmeet`| 127.0.0.1:17000    | 0.0.0.0:7880      | `http://liveKitServerAgent:7880`, `:7980`  |
+| dev      | bridge `webmeet`| 127.0.0.1:17000    | 0.0.0.0:17880     | `http://liveKitServerAgent:17880`, `:7980` |
 | prod     | host networking | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://host.containers.internal:7880`/`:7980` |
+
+Default and dev LiveKit generated config includes `rtc.node_ip` set to the
+detected workstation IPv4 address unless `WEBMEET_LIVEKIT_NODE_IP` is
+explicitly set. The same detected address seeds `WEBMEET_PUBLIC_LIVEKIT_URL`,
+`WEBMEET_TURN_EXTERNAL_IP`, and `WEBMEET_TURN_HOST` when those values are
+missing or still point at loopback. `WEBMEET_LOCAL_PUBLIC_HOST` is the
+operator override for this local detection. The `prod` profile does not set
+`node_ip` by default; it uses host networking and `use_external_ip` semantics
+instead.
 
 ### WebMeet integration boundary
 
@@ -113,9 +132,9 @@ rooms, invite tokens, participant membership, chat, transcripts, artifacts, AI
 dispatch metadata, recording commands, and LiveKit participant JWT issuance.
 The shared boundary is intentionally narrow:
 
-- Browsers connect to LiveKit through `WEBMEET_PUBLIC_LIVEKIT_URL`, which is a
-  local `ws://127.0.0.1:<signaling-port>` URL in default/dev profiles and the
-  production `wss://` signaling hostname in prod.
+- Browsers connect to LiveKit through `WEBMEET_PUBLIC_LIVEKIT_URL`, which is
+  seeded to `ws://<detected-local-ip>:<signaling-port>` in default/dev
+  profiles and the production `wss://` signaling hostname in prod.
 - `webmeetAgent` calls LiveKit RoomService, AgentDispatchService, and Egress
   Twirp APIs through `WEBMEET_LIVEKIT_URL`, using
   `http://liveKitServerAgent:7880` in default,
@@ -154,9 +173,10 @@ the downlink. Host networking puts LiveKit directly in the host's network
 namespace so it observes real client addresses on its server-initiated send
 path. Host networking also lets Nginx bind 80/443 directly without giving the
 container `CAP_NET_BIND` on a bridge. The default and dev profiles continue
-to use bridge networking because the failure mode does not appear on a
-single-machine workstation and macOS hosts cannot probe host-network
-containers from the workstation.
+to use bridge networking for workstation use, but they publish only the
+browser-facing LiveKit/TURN ports beyond loopback and advertise the detected
+workstation IPv4 address so browsers do not have to reach bridge-container
+addresses directly.
 
 ### Question #3: Why is the readiness probe `tcp` instead of `mcp`?
 
