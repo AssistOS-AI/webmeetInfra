@@ -47,19 +47,12 @@
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-key",
-                    "deriveBytes": 16
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-secret"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
@@ -119,10 +112,7 @@
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-turn",
-                    "deriveName": "password"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",
@@ -164,19 +154,12 @@
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-key",
-                    "deriveBytes": 16
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-secret"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
@@ -236,10 +219,7 @@
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
                     "required": false,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-turn",
-                    "deriveName": "password"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",
@@ -280,19 +260,12 @@
                 {
                     "name": "WEBMEET_LIVEKIT_API_KEY",
                     "required": true,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-key",
-                    "deriveBytes": 16
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_API_SECRET",
                     "required": true,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-livekit",
-                    "deriveName": "api-secret"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_LIVEKIT_USE_EXTERNAL_IP",
@@ -356,10 +329,7 @@
                 {
                     "name": "WEBMEET_TURN_PASSWORD",
                     "required": true,
-                    "derive": "derived-master",
-                    "deriveRepoName": "webmeet",
-                    "deriveAgentName": "shared-turn",
-                    "deriveName": "password"
+                    "sharedGeneratedSecret": true
                 },
                 {
                     "name": "WEBMEET_TURN_MIN_PORT",

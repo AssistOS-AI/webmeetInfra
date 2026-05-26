@@ -75,10 +75,10 @@ if any required service (`redis-server`, `turnserver`, `livekit-server`,
   `.ploinky/agents/liveKitServerAgent/` into `/working-data/generated`; durable
   state is mounted from
   `.ploinky/data/webmeet/...` and `.ploinky/data/webmeetTls/...`.
-- LiveKit shared API credentials derive from repo `webmeet`, agent
-  `shared-livekit`. The TURN shared secret derives from repo `webmeet`, agent
-  `shared-turn`. Both must come through manifest `derive: "derived-master"`
-  entries; no profile may generate hard-coded development credentials.
+- LiveKit shared API credentials and the TURN shared secret are
+  workspace-scoped generated secrets. All consumers declare the same env names
+  with `sharedGeneratedSecret: true`; no
+  profile may generate hard-coded development credentials.
 - Default and dev profiles use the bridge network `webmeet` with the alias
   `liveKitServerAgent`. Consumers reach LiveKit at `liveKitServerAgent:7880`
   (or `:17880` in dev) and Egress at `liveKitServerAgent:7980`.
