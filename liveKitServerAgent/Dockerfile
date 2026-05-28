@@ -13,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN set -eu; \
     if command -v apt-get >/dev/null 2>&1; then \
+        rm -f /etc/apt/sources.list.d/google*.list; \
         apt-get update; \
         apt-get install -y --no-install-recommends \
             ca-certificates \
