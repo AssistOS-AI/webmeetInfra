@@ -35,7 +35,9 @@ the token in this repo.
 
 - `manifest.json` — Ploinky manifest with `default`, `dev`, and `prod` profiles
 - `Dockerfile` — final image based on `livekit/egress` plus `livekit-server`,
-  `redis-server`, `coturn`, `nginx`, `certbot`, `tini`, and `curl`
+  Node 24 from the shared Ploinky Node base, `redis-server`, `coturn`, `nginx`,
+  `certbot`, `tini`, `curl`, and Ploinky dependency-cache tools (`git`, `make`,
+  `g++`)
 - `scripts/start-livekit-server-agent.sh` — in-container supervisor
 - `scripts/hooks/preinstall.sh` — host-side generator for runtime config
 - `scripts/health/livekit-server-agent-health.sh` — operator smoke check

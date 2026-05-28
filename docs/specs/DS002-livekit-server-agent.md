@@ -35,9 +35,10 @@ emulation.
 
 ### Supervised services
 
-The image includes `node` and `npm` for Ploinky's container runtime-key probe
-and dependency bootstrap, `python3` for the local health listener, and `nc` for
-portable TCP readiness checks. The supervisor
+The image copies Node 24 and npm from the shared Ploinky Node base for Ploinky's
+container runtime-key probe, includes `git`, `make`, and `g++` for Ploinky
+dependency-cache bootstrap, `python3` for the local health listener, and `nc`
+for portable TCP readiness checks. The supervisor
 (`scripts/start-livekit-server-agent.sh`) starts the following services in
 order, blocking on TCP readiness between steps:
 
