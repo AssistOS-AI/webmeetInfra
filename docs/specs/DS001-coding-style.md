@@ -10,22 +10,22 @@ summary: Defines documentation, manifest, hook, and validation style for webmeet
 
 ## Introduction
 
-This specification is the local coding-style authority for `webmeetInfra`. It covers the consolidated LiveKit runtime repository: manifests, Docker image assets, generated config hooks, shell supervision, health checks, and documentation.
+This specification is the local coding-style authority for `webmeetInfra`. It covers the consolidated LiveKit runtime repository: manifests, centralized Docker image source contracts, generated config hooks, shell supervision, health checks, and documentation.
 
 ## Core Content
 
-`webmeetInfra` changes are mostly manifests, generated runtime config templates, shell scripts, Docker image assets, workflow files, and documentation. JSON manifests use two-space indentation where the local file already does so. Shell hooks and supervisors should use portable POSIX shell patterns unless a manifest explicitly chooses another shell. Documentation, specifications, and code comments must be written in English.
+`webmeetInfra` changes are mostly manifests, generated runtime config templates, shell scripts, centralized Docker image source contracts, and documentation. JSON manifests use two-space indentation where the local file already does so. Shell hooks and supervisors should use portable POSIX shell patterns unless a manifest explicitly chooses another shell. Documentation, specifications, and code comments must be written in English.
 
 The local source layout is contract-bearing:
 
 | Path | Purpose |
 | --- | --- |
 | `liveKitServerAgent/manifest.json` | Ploinky agent command, network profile, ports, volumes, readiness, and derived secret contract. |
-| `liveKitServerAgent/Dockerfile` | Runtime image that installs Redis, Coturn, LiveKit Server, LiveKit Egress, Nginx, Certbot, Node, Python, and health-probe helpers. |
+| `AssistOS-AI/container-image-builds/images/livekit-server-agent/Dockerfile` | Central runtime image definition that installs Redis, Coturn, LiveKit Server, LiveKit Egress, Nginx, Certbot, Node, Python, and health-probe helpers against this repository's `liveKitServerAgent` build context. |
 | `liveKitServerAgent/scripts/hooks/preinstall.sh` | Generates runtime config under `.ploinky/agents/liveKitServerAgent/`. |
 | `liveKitServerAgent/scripts/start-livekit-server-agent.sh` | Supervises the in-container services and readiness gate. |
 | `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh` | Health endpoint helper used by Ploinky TCP readiness. |
-| `.github/workflows/publish-livekit-server-agent.yml` | Manual Docker image publishing workflow. |
+| `AssistOS-AI/container-image-builds/.github/workflows/publish-livekit-server-agent.yml` | Manual Docker image publishing workflow. |
 | `docs/specs/` | Authoritative DS contracts. |
 
 Generated or runtime-owned files such as LiveKit YAML, Egress YAML, Redis data, TLS material, and recording outputs must not be treated as hand-authored source files. Generated config templates must use manifest-provided env and derived secrets; they must not commit plaintext local credentials.
@@ -53,4 +53,4 @@ The shell scripts encode the readiness and process-supervision contract. Documen
 
 ## Conclusion
 
-Coding Style remains valid while infrastructure changes preserve the local source layout, generated-config boundary, derived-secret behavior, shell validation expectations, and DS/documentation synchronization rules.
+Coding Style remains valid while infrastructure changes preserve the local source layout, centralized image-build boundary, generated-config boundary, derived-secret behavior, shell validation expectations, and DS/documentation synchronization rules.

@@ -23,15 +23,18 @@ The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
 directly. This tag is the default runtime image for every profile.
 
 The image is built and published by the manual GitHub Actions workflow
-`.github/workflows/publish-livekit-server-agent.yml`. The workflow is
-`workflow_dispatch` only. Docker Hub authentication uses the `DOCKERHUB_TOKEN`
-repository secret. The workflow publishes the raw `webmeet-infra` tag and an
-sha-prefixed `webmeet-infra-<sha>` tag through `docker/setup-buildx-action`,
-`docker/metadata-action`, and `docker/build-push-action` with
-`provenance: false`. The workflow publishes a multi-architecture image for
-`linux/amd64` and `linux/arm64` so Apple Silicon/aarch64 Podman machines pull a
-native image instead of running Redis and the media stack through QEMU
-emulation.
+`publish-livekit-server-agent.yml` in `AssistOS-AI/container-image-builds`.
+The workflow is `workflow_dispatch` only. It checks out this repository as the
+build context and uses
+`container-image-builds/images/livekit-server-agent/Dockerfile` as the
+centralized Dockerfile. Docker Hub authentication uses the `DOCKERHUB_TOKEN`
+secret in `AssistOS-AI/container-image-builds`. The workflow publishes the raw
+`webmeet-infra` tag and an sha-prefixed `webmeet-infra-<sha>` tag through
+`docker/setup-buildx-action`, `docker/metadata-action`, and
+`docker/build-push-action` with `provenance: false`. The workflow publishes a
+multi-architecture image for `linux/amd64` and `linux/arm64` so Apple
+Silicon/aarch64 Podman machines pull a native image instead of running Redis
+and the media stack through QEMU emulation.
 
 ### Supervised services
 

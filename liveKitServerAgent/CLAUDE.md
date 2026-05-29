@@ -52,7 +52,7 @@ state lives under `.ploinky/data/webmeet/` (Redis dump, recordings) and
 ## Key Paths
 
 - `manifest.json`
-- `Dockerfile`
+- `../../container-image-builds/images/livekit-server-agent/Dockerfile` — centralized image definition for this build context
 - `scripts/start-livekit-server-agent.sh`
 - `scripts/hooks/preinstall.sh`
 - `scripts/health/livekit-server-agent-health.sh`

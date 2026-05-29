@@ -49,11 +49,11 @@ process has no view of the host runtime and cannot spawn additional agents.
 
 - `docs/specs/matrix.md`
 - `liveKitServerAgent/manifest.json`
-- `liveKitServerAgent/Dockerfile`
+- `../container-image-builds/images/livekit-server-agent/Dockerfile` — centralized image definition for the `liveKitServerAgent` build context
 - `liveKitServerAgent/scripts/start-livekit-server-agent.sh`
 - `liveKitServerAgent/scripts/hooks/preinstall.sh`
 - `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh`
-- `.github/workflows/publish-livekit-server-agent.yml`
+- `../container-image-builds/.github/workflows/publish-livekit-server-agent.yml` — centralized Docker Hub publish workflow
 
 ## Validation
 
