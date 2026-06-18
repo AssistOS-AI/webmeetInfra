@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-workspace_root="${PLOINKY_CWD:-$PWD}"
+workspace_root="$PLOINKY_WORKSPACE_ROOT"
 profile="${PLOINKY_PROFILE:-default}"
 agent_dir="${workspace_root}/.ploinky/agents/liveKitServerAgent"
 data_dir="${workspace_root}/.ploinky/data/webmeet"
