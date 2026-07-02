@@ -9,7 +9,7 @@
         "privileged": false
     },
     "volumes": {
-        ".ploinky/agents/liveKitServerAgent": "/working-data/generated",
+        ".data/liveKitServerAgent/generated": "/working-data/generated",
         ".ploinky/data/webmeet/redis": "/data/redis",
         ".ploinky/data/webmeet/recordings": "/data/recordings",
         ".ploinky/data/webmeetTls/letsencrypt": "/etc/letsencrypt",

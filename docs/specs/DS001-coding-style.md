@@ -22,7 +22,7 @@ The local source layout is contract-bearing:
 | --- | --- |
 | `liveKitServerAgent/manifest.json` | Ploinky agent command, network profile, ports, volumes, readiness, and derived secret contract. |
 | `AssistOS-AI/container-image-builds/images/livekit-server-agent/Dockerfile` | Central runtime image definition that installs Redis, Coturn, LiveKit Server, LiveKit Egress, Nginx, Certbot, Node, Python, and health-probe helpers against this repository's `liveKitServerAgent` build context. |
-| `liveKitServerAgent/scripts/hooks/preinstall.sh` | Generates runtime config under `.ploinky/agents/liveKitServerAgent/`. |
+| `liveKitServerAgent/scripts/hooks/preinstall.sh` | Generates runtime config under `.data/liveKitServerAgent/generated/`. |
 | `liveKitServerAgent/scripts/start-livekit-server-agent.sh` | Supervises the in-container services and readiness gate. |
 | `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh` | Health endpoint helper used by Ploinky TCP readiness. |
 | `AssistOS-AI/container-image-builds/.github/workflows/publish-livekit-server-agent.yml` | Manual Docker image publishing workflow. |

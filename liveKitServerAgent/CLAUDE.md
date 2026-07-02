@@ -44,7 +44,7 @@ manifest `enable` edges before this agent's container exists, and an in-process
 state. Every required service must therefore be installed in the image and
 supervised by the script directly.
 
-Generated config under `.ploinky/agents/liveKitServerAgent/` is rebuilt every
+Generated config under `.data/liveKitServerAgent/generated/` is rebuilt every
 preinstall and must not contain secrets that leak outside the workspace. Durable
 state lives under `.ploinky/data/webmeet/` (Redis dump, recordings) and
 `.ploinky/data/webmeetTls/` (Let's Encrypt directory).

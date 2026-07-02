@@ -3,7 +3,7 @@ set -euo pipefail
 
 workspace_root="$PLOINKY_WORKSPACE_ROOT"
 profile="${PLOINKY_PROFILE:-default}"
-agent_dir="${workspace_root}/.ploinky/agents/liveKitServerAgent"
+agent_dir="${workspace_root}/.data/liveKitServerAgent/generated"
 data_dir="${workspace_root}/.ploinky/data/webmeet"
 tls_dir="${workspace_root}/.ploinky/data/webmeetTls"
 

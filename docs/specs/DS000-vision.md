@@ -28,7 +28,7 @@ The active runtime is the consolidated `liveKitServerAgent`:
 
 The runtime image is published to Docker Hub as `assistos/livekit-server-agent:webmeet-infra` through the manual `publish-livekit-server-agent.yml` GitHub Actions workflow in `AssistOS-AI/container-image-builds`. Publishing uses the `DOCKERHUB_TOKEN` secret from that repository; token values must never be committed or documented as plaintext.
 
-Generated runtime config belongs under `.ploinky/agents/liveKitServerAgent/`. Durable infrastructure state belongs under `.ploinky/data/webmeet/...` and `.ploinky/data/webmeetTls/...`. Recording files written by Egress are shared file artifacts under `.ploinky/data/webmeet/recordings`; WebMeet recording metadata remains in the `webmeetAgent` encrypted meeting payload.
+Generated runtime config belongs under `.data/liveKitServerAgent/generated/`. Durable infrastructure state belongs under `.ploinky/data/webmeet/...` and `.ploinky/data/webmeetTls/...`. Recording files written by Egress are shared file artifacts under `.ploinky/data/webmeet/recordings`; WebMeet recording metadata remains in the `webmeetAgent` encrypted meeting payload.
 
 `webmeetInfra` must not expose guest-facing WebMeet HTTP routes. Public guest access, protected Explorer access, room visibility, recording policy, AI attach/detach policy, and LiveKit participant JWT issuance remain in `webmeetAgent`.
 

@@ -80,7 +80,7 @@ if any required service (`redis-server`, `turnserver`, `livekit-server`,
 - The health port is first in every profile's `ports` list so the readiness
   gate probes the supervisor, not the LiveKit signaling port.
 - Generated config is mounted as a single directory from
-  `.ploinky/agents/liveKitServerAgent/` into `/working-data/generated`; durable
+  `.data/liveKitServerAgent/generated/` into `/working-data/generated`; durable
   state is mounted from
   `.ploinky/data/webmeet/...` and `.ploinky/data/webmeetTls/...`.
 - LiveKit shared API credentials and the TURN shared secret are
@@ -145,7 +145,7 @@ The shared boundary is intentionally narrow:
   `http://liveKitServerAgent:17880` in dev, and
   `http://host.containers.internal:7880` in prod.
 - LiveKit Egress uses the generated `ws_url` in
-  `.ploinky/agents/liveKitServerAgent/egress.yaml` to join rooms as the
+  `.data/liveKitServerAgent/generated/egress.yaml` to join rooms as the
   recorder worker and writes MP4 files to the shared
   `.ploinky/data/webmeet/recordings` volume.
 - Redis is LiveKit and Egress runtime coordination state. It is not the

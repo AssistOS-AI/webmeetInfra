@@ -40,7 +40,7 @@ Agent-local contract:
 - Role: Single Ploinky agent that supervises the WebMeet media runtime.
 - Authentication: The agent runs as a dependency of `webmeetAgent` / `webmeetLivekitAiAgent` and must not expose application guest or admin policy by itself.
 - HTTP service surface: No infrastructure manifest declares public HTTP services; application-facing guest routes belong to `webmeetAgent`.
-- Persistent state: Generated LiveKit/Egress/Redis/Coturn/Nginx config and the in-container supervisor are runtime resources controlled by the manifest. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, durable Redis state under `.ploinky/data/webmeet/redis`, TLS state under `.ploinky/data/webmeetTls/...`, and generated config under `.ploinky/agents/liveKitServerAgent/...`.
+- Persistent state: Generated LiveKit/Egress/Redis/Coturn/Nginx config and the in-container supervisor are runtime resources controlled by the manifest. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, durable Redis state under `.ploinky/data/webmeet/redis`, TLS state under `.ploinky/data/webmeetTls/...`, and generated config under `.data/liveKitServerAgent/generated/...`.
 - Documentation: `docs/index.html`
 - Validation: `ploinky start AchillesIDE/webmeetAgent` plus `ploinky status` confirm the consolidated agent reports ready.
 - Supervisor scope: `scripts/start-livekit-server-agent.sh` may only manage processes installed inside this image. It must not invoke `ploinky` or otherwise try to start sibling agents, because Ploinky resolves `enable` edges before the container is created.
