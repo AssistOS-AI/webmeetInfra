@@ -2,21 +2,32 @@
 
 Ploinky repository for the WebMeet media runtime.
 
-The runtime is delivered by one Ploinky agent that supervises Redis, Coturn,
-LiveKit Server, LiveKit Egress, and (in the `prod` profile) Nginx + Certbot
-inside a single container:
+The runtime is delivered by two Ploinky agents:
 
-- `webmeetInfra/liveKitServerAgent` — see [`liveKitServerAgent/README.md`](liveKitServerAgent/README.md)
+- `webmeetInfra/liveKitServerAgent` — supervises Redis, LiveKit Server, and
+  LiveKit Egress inside one container; see
+  [`liveKitServerAgent/README.md`](liveKitServerAgent/README.md)
+- `webmeetInfra/turnServerAgent` — runs Coturn as a dedicated TURN/STUN relay
+  with shared-secret REST/ephemeral auth and a fail-closed peer ACL; see
+  [`turnServerAgent/README.md`](turnServerAgent/README.md)
 
-The image is published to Docker Hub at
+Neither agent runs Nginx or Certbot. The WebMeet signaling edge (TLS
+termination, reverse proxying) lives in `basic/web-publishing`, a different
+repository.
+
+The `liveKitServerAgent` image is published to Docker Hub at
 `assistos/livekit-server-agent:webmeet-infra` through the manual
 `publish-livekit-server-agent.yml` workflow in
 `AssistOS-AI/container-image-builds`. That workflow checks out this repository
 as the build context, uses the centralized Dockerfile from
 `container-image-builds/images/livekit-server-agent/Dockerfile`, and publishes
-`linux/amd64` and `linux/arm64` variants under the same tag. Authentication
+`linux/amd64` and `linux/arm64` variants under the same tag. It also exposes and
+validates the pushed manifest digest, then reports the immutable image reference
+in the workflow log and summary without moving consumer manifests. Authentication
 uses the `DOCKERHUB_TOKEN` GitHub Actions secret in
 `AssistOS-AI/container-image-builds`; never commit token values to any repo.
+`turnServerAgent` pulls the upstream `docker.io/coturn/coturn` image directly,
+pinned by digest; it has no custom build or publishing workflow.
 
 The app-facing WebMeet agent remains in `AchillesIDE`; this repository only
 owns the runtime services.

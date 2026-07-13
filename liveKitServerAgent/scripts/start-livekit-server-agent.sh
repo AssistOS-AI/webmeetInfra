@@ -1,26 +1,33 @@
 #!/bin/sh
 set -eu
 
+# Preinstall has already materialized the required private configs. Re-exec
+# immediately without secrets that the supervisor and its children never need,
+# so long-lived process environments do not duplicate those credentials.
+if [ "${WEBMEET_RUNTIME_ENV_SCRUBBED:-}" != "1" ]; then
+    exec env \
+        -u WEBMEET_TURN_AUTH_SECRET \
+        -u WEBMEET_LIVEKIT_API_KEY \
+        -u WEBMEET_LIVEKIT_API_SECRET \
+        WEBMEET_RUNTIME_ENV_SCRUBBED=1 \
+        sh "$0" "$@"
+fi
+
 GENERATED_DIR="/working-data/generated"
-LIVEKIT_CONFIG="${GENERATED_DIR}/livekit.yaml"
+LIVEKIT_TEMPLATE="${GENERATED_DIR}/livekit.yaml"
 EGRESS_CONFIG="${GENERATED_DIR}/egress.yaml"
 REDIS_CONFIG="${GENERATED_DIR}/redis.conf"
-TURN_CONFIG="${GENERATED_DIR}/turnserver.conf"
-NGINX_CONFIG="${GENERATED_DIR}/nginx.conf"
-LIVEKIT_NGINX_CONFIG="${GENERATED_DIR}/livekit.conf"
-
-REDIS_DATA_DIR="${WEBMEET_REDIS_DATA_DIR:-/data/redis}"
-RECORDING_DIR="${WEBMEET_RECORDINGS_DIR:-/data/recordings}"
-HEALTH_PORT="${WEBMEET_INFRA_HEALTH_PORT:-17000}"
-HEALTH_INDEX_DIR="/tmp/webmeet-health"
-
 PROFILE="${PLOINKY_PROFILE:-default}"
-WAIT_FOR_TIMEOUT="${WEBMEET_INFRA_WAIT_TIMEOUT:-30}"
+RUNTIME_DIR="$(mktemp -d /tmp/livekit-server-agent.XXXXXX)"
+LIVEKIT_CONFIG="${RUNTIME_DIR}/livekit.yaml"
 
-mkdir -p "$REDIS_DATA_DIR" "$RECORDING_DIR" "$HEALTH_INDEX_DIR"
+REDIS_DATA_DIR="/data/redis"
+RECORDING_DIR="/data/recordings"
+WAIT_FOR_TIMEOUT=30
+
+mkdir -p "$REDIS_DATA_DIR" "$RECORDING_DIR"
 
 PIDS=""
-EXIT_REASON=""
 
 log() {
     printf '[liveKitServerAgent] %s\n' "$1"
@@ -37,10 +44,81 @@ require_file() {
     fi
 }
 
-require_file "$LIVEKIT_CONFIG"
+require_file "$LIVEKIT_TEMPLATE"
 require_file "$EGRESS_CONFIG"
 require_file "$REDIS_CONFIG"
-require_file "$TURN_CONFIG"
+
+command -v nc >/dev/null 2>&1 || {
+    err "pinned image is missing nc"
+    exit 1
+}
+
+is_ipv4() {
+    printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+}
+
+resolve_local_node_ip() {
+    command -v getent >/dev/null 2>&1 || {
+        err "getent is required to resolve the TURN trust-zone peer"
+        return 1
+    }
+    command -v ip >/dev/null 2>&1 || {
+        err "ip is required to select the local LiveKit TURN trust-zone address"
+        return 1
+    }
+    attempt=0
+    while [ "$attempt" -lt "$WAIT_FOR_TIMEOUT" ]; do
+        peer_addresses="$(getent ahostsv4 turnserveragent 2>/dev/null \
+            | awk '{print $1}' \
+            | sort -u \
+            | sed '/^$/d' || true)"
+        peer_count="$(printf '%s\n' "$peer_addresses" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
+        if [ "$peer_count" = "1" ] && is_ipv4 "$peer_addresses"; then
+            local_address="$(ip -4 route get "$peer_addresses" 2>/dev/null \
+                | awk '{ for (i = 1; i <= NF; i++) if ($i == "src" && (i + 1) <= NF) { print $(i + 1); exit } }' \
+                || true)"
+            if is_ipv4 "$local_address"; then
+                printf '%s\n' "$local_address"
+                return 0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+    err "turnserveragent did not resolve to one reachable TURN trust-zone IPv4 address within ${WAIT_FOR_TIMEOUT}s"
+    return 1
+}
+
+prepare_livekit_config() {
+    cp "$LIVEKIT_TEMPLATE" "$LIVEKIT_CONFIG"
+    chmod 0600 "$LIVEKIT_CONFIG"
+    case "$PROFILE" in
+        default|dev)
+            local_node_ip="$(resolve_local_node_ip)" || exit 1
+            marker_count="$(grep -c '__WEBMEET_LOCAL_NODE_IP__' "$LIVEKIT_CONFIG" || true)"
+            [ "$marker_count" = "1" ] || {
+                err "local LiveKit config must contain exactly one node-IP marker"
+                exit 1
+            }
+            sed "s/__WEBMEET_LOCAL_NODE_IP__/${local_node_ip}/" "$LIVEKIT_CONFIG" > "${LIVEKIT_CONFIG}.resolved"
+            chmod 0600 "${LIVEKIT_CONFIG}.resolved"
+            mv "${LIVEKIT_CONFIG}.resolved" "$LIVEKIT_CONFIG"
+            log "resolved local relay-only LiveKit media address on the webmeet-turn bridge"
+            ;;
+        prod)
+            if grep -q '__WEBMEET_LOCAL_NODE_IP__' "$LIVEKIT_CONFIG"; then
+                err "prod LiveKit config contains a local node-IP marker"
+                exit 1
+            fi
+            ;;
+        *)
+            err "unknown PLOINKY_PROFILE '$PROFILE'"
+            exit 1
+            ;;
+    esac
+}
+
+prepare_livekit_config
 
 wait_for_tcp() {
     label="$1"
@@ -58,35 +136,6 @@ wait_for_tcp() {
     return 1
 }
 
-resolve_turn_external_ip() {
-    if [ "${WEBMEET_TURN_EXTERNAL_IP:-}" = "auto" ]; then
-        host="${WEBMEET_TURN_HOST:?WEBMEET_TURN_HOST is required when WEBMEET_TURN_EXTERNAL_IP=auto}"
-        resolved=""
-        if command -v getent >/dev/null 2>&1; then
-            resolved=$(getent ahostsv4 "$host" 2>/dev/null | awk '{print $1; exit}')
-        fi
-        if [ -z "$resolved" ] && command -v dig >/dev/null 2>&1; then
-            resolved=$(dig +short A "$host" 2>/dev/null | head -n 1)
-        fi
-        if [ -z "$resolved" ]; then
-            err "failed to resolve WEBMEET_TURN_HOST='$host'"
-            return 1
-        fi
-        export WEBMEET_TURN_RESOLVED_EXTERNAL_IP="$resolved"
-        log "resolved TURN external IP: $resolved"
-    fi
-}
-
-write_turn_runtime_config() {
-    resolved="${WEBMEET_TURN_RESOLVED_EXTERNAL_IP:-${WEBMEET_TURN_EXTERNAL_IP:-127.0.0.1}}"
-    runtime_config="${GENERATED_DIR}/turnserver.runtime.conf"
-    awk -v ip="$resolved" '
-        /^external-ip=/ { print "external-ip=" ip; next }
-        { print }
-    ' "$TURN_CONFIG" > "$runtime_config"
-    echo "$runtime_config"
-}
-
 start_redis() {
     log "starting redis"
     redis-server "$REDIS_CONFIG" --dir "$REDIS_DATA_DIR" &
@@ -95,25 +144,12 @@ start_redis() {
     wait_for_tcp "redis" 127.0.0.1 6379
 }
 
-start_coturn() {
-    log "starting coturn"
-    runtime_config=$(write_turn_runtime_config)
-    turnserver -c "$runtime_config" &
-    COTURN_PID=$!
-    PIDS="$PIDS $COTURN_PID"
-    turn_port=$(awk -F= '/^listening-port=/ {print $2; exit}' "$runtime_config")
-    [ -n "$turn_port" ] || turn_port=3478
-    wait_for_tcp "coturn" 127.0.0.1 "$turn_port"
-}
-
 start_livekit() {
     log "starting livekit-server"
     livekit-server --config "$LIVEKIT_CONFIG" &
     LIVEKIT_PID=$!
     PIDS="$PIDS $LIVEKIT_PID"
-    signal_port=$(awk '/^port:/ {print $2; exit}' "$LIVEKIT_CONFIG")
-    [ -n "$signal_port" ] || signal_port=7880
-    wait_for_tcp "livekit-server" 127.0.0.1 "$signal_port"
+    wait_for_tcp "livekit-server" 127.0.0.1 7880
 }
 
 start_egress() {
@@ -121,94 +157,7 @@ start_egress() {
     EGRESS_CONFIG_FILE="$EGRESS_CONFIG" egress &
     EGRESS_PID=$!
     PIDS="$PIDS $EGRESS_PID"
-    egress_health_port=$(awk '/^[[:space:]]*health_port:/ {print $2; exit}' "$EGRESS_CONFIG")
-    [ -n "$egress_health_port" ] || egress_health_port=7980
-    wait_for_tcp "livekit-egress" 127.0.0.1 "$egress_health_port"
-}
-
-maybe_start_nginx() {
-    if [ "$PROFILE" != "prod" ]; then
-        return 0
-    fi
-    if [ ! -f "$NGINX_CONFIG" ] || [ ! -f "$LIVEKIT_NGINX_CONFIG" ]; then
-        log "nginx config missing; skipping TLS terminator"
-        return 0
-    fi
-    hostname="${WEBMEET_TLS_HOSTNAME:-}"
-    if [ -z "$hostname" ]; then
-        err "prod profile requires WEBMEET_TLS_HOSTNAME for nginx"
-        return 1
-    fi
-    cert_path="/etc/letsencrypt/live/${hostname}/fullchain.pem"
-    if [ ! -f "$cert_path" ]; then
-        log "waiting for TLS certificate at $cert_path"
-        # In prod, certbot writes the cert below; we wait up to 5 minutes the
-        # first time, then start nginx asynchronously once it appears.
-        ( deadline=$(( $(date +%s) + 300 ))
-          while [ ! -f "$cert_path" ] && [ "$(date +%s)" -lt "$deadline" ]; do
-              sleep 5
-          done
-          if [ -f "$cert_path" ]; then
-              log "starting nginx after cert is present"
-              nginx -c "$NGINX_CONFIG" -g 'daemon off;' &
-          else
-              err "TLS certificate did not appear; nginx not started"
-          fi
-        ) &
-        return 0
-    fi
-    log "starting nginx"
-    nginx -c "$NGINX_CONFIG" -g 'daemon off;' &
-    NGINX_PID=$!
-    PIDS="$PIDS $NGINX_PID"
-}
-
-maybe_start_certbot_loop() {
-    if [ "$PROFILE" != "prod" ]; then
-        return 0
-    fi
-    auto_issue="${WEBMEET_CERTBOT_AUTO_ISSUE:-false}"
-    hostname="${WEBMEET_TLS_HOSTNAME:-}"
-    if [ -z "$hostname" ]; then
-        return 0
-    fi
-    email="${WEBMEET_CERT_EMAIL:-}"
-    interval="${WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS:-43200}"
-    webroot="/var/www/certbot"
-    live_dir="/etc/letsencrypt/live/${hostname}"
-    mkdir -p "$webroot"
-
-    if [ ! -d "$live_dir" ] && [ "$auto_issue" = "true" ]; then
-        if [ -z "$email" ]; then
-            err "WEBMEET_CERTBOT_AUTO_ISSUE=true requires WEBMEET_CERT_EMAIL"
-            return 1
-        fi
-        log "issuing initial cert via standalone HTTP-01"
-        certbot certonly --standalone \
-            -d "$hostname" \
-            --email "$email" \
-            --agree-tos --non-interactive --no-eff-email || \
-            err "initial certbot issuance failed"
-    fi
-
-    (
-        while true; do
-            if [ -d "$live_dir" ]; then
-                certbot renew --webroot --webroot-path "$webroot" --no-random-sleep-on-renew >/dev/null 2>&1 || true
-            fi
-            sleep "$interval"
-        done
-    ) &
-    CERTBOT_PID=$!
-    PIDS="$PIDS $CERTBOT_PID"
-}
-
-start_health_listener() {
-    printf 'ok\n' > "${HEALTH_INDEX_DIR}/index.html"
-    log "starting health endpoint on 0.0.0.0:${HEALTH_PORT}"
-    ( cd "${HEALTH_INDEX_DIR}" && python3 -m http.server "${HEALTH_PORT}" --bind 0.0.0.0 >/dev/null 2>&1 ) &
-    HEALTH_PID=$!
-    PIDS="$PIDS $HEALTH_PID"
+    wait_for_tcp "livekit-egress" 127.0.0.1 7980
 }
 
 shutdown_children() {
@@ -226,25 +175,21 @@ shutdown_children() {
             kill -9 "$pid" 2>/dev/null || true
         fi
     done
+    rm -rf "$RUNTIME_DIR"
 }
 
-trap 'EXIT_REASON=signal; shutdown_children; exit 0' INT TERM
+trap 'shutdown_children; exit 0' INT TERM
 trap 'rc=$?; shutdown_children; exit $rc' EXIT
 
-resolve_turn_external_ip
 start_redis
-start_coturn
 start_livekit
 start_egress
-maybe_start_nginx
-maybe_start_certbot_loop
-start_health_listener
 
 log "all required services started"
 
 # Watch supervised pids; exit nonzero if any required service dies.
 while true; do
-    for pid in $REDIS_PID $COTURN_PID $LIVEKIT_PID $EGRESS_PID $HEALTH_PID; do
+    for pid in $REDIS_PID $LIVEKIT_PID $EGRESS_PID; do
         if ! kill -0 "$pid" 2>/dev/null; then
             err "supervised service pid $pid exited; tearing down"
             exit 1

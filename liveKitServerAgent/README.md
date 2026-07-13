@@ -1,17 +1,36 @@
 # liveKitServerAgent
 
-Single Ploinky agent that supervises the full WebMeet media runtime in one
+Single Ploinky agent that supervises the LiveKit media runtime in one
 container.
 
 The supervisor in `scripts/start-livekit-server-agent.sh` starts and watches:
 
 - Redis (state for LiveKit and Egress)
-- Coturn (TURN/STUN connectivity)
 - LiveKit Server (SFU)
 - LiveKit Egress (recordings and composite output)
-- Nginx (TLS terminator, `prod` profile only)
-- Certbot renew loop (Let's Encrypt cert renewal, `prod` profile only)
-- A small `/` health endpoint on `WEBMEET_INFRA_HEALTH_PORT`
+
+TURN/STUN relay behavior lives in the sibling `../turnServerAgent` agent, not
+here. The generated `livekit.yaml` advertises `rtc.turn_servers` pointing at
+`turnServerAgent` using a shared secret (`WEBMEET_TURN_AUTH_SECRET`) so
+LiveKit Server can mint and hand browsers ephemeral TURN credentials without
+either agent hard-coding a long-lived one. Signaling TLS termination (Nginx,
+Certbot) also no longer lives here; the WebMeet signaling edge is
+`basic/web-publishing`.
+
+Preinstall writes those credentials only into the owner-only generated config.
+It rejects symlinked workspace storage paths, atomically replaces final config
+leaves, and accepts only Ploinky's generated credential encoding. The shared
+TURN secret has no operator-override path. The three generated credentials use
+`runtime: false`, so Ploinky exposes them to preinstall but omits them from OCI
+environment metadata and later execs. The runtime script's re-exec scrub is
+retained as defense in depth.
+
+Production accepts only a public multi-label TURN DNS hostname and caps TURN
+credential lifetime at 86400 seconds; local profiles retain loopback defaults.
+
+LiveKit logging defaults to `warn`: this pinned release includes publisher SDP
+in its `info` RTC-session event. Operators may explicitly select `info`/`debug`
+for sensitive diagnostics, and preinstall emits a warning when they do.
 
 The supervisor does not start sibling Ploinky agents. Ploinky resolves manifest
 `enable` edges before the container is created, so the in-container script can
@@ -30,7 +49,9 @@ The image is published through `publish-livekit-server-agent.yml` in
 `AssistOS-AI/container-image-builds` (manual `workflow_dispatch` only). That
 workflow checks out this repository as the build context, uses the centralized
 Dockerfile from `container-image-builds/images/livekit-server-agent/Dockerfile`,
-and publishes `linux/amd64` plus `linux/arm64` variants. It uses the
+and publishes `linux/amd64` plus `linux/arm64` variants. The stable tags remain
+available while the workflow exposes, validates, and reports the pushed
+manifest's immutable sha256 reference. It uses the
 `DOCKERHUB_TOKEN` secret in `AssistOS-AI/container-image-builds`; do not store
 the token in any repo.
 
@@ -39,32 +60,33 @@ the token in any repo.
 - `manifest.json` — Ploinky manifest with `default`, `dev`, and `prod` profiles
 - centralized Dockerfile — final image based on `livekit/egress` plus
   `livekit-server`, Node 24 from the shared Ploinky Node base, `redis-server`,
-  `coturn`, `nginx`, `certbot`, `tini`, `curl`, and Ploinky dependency-cache
-  tools (`git`, `make`, `g++`); source lives in
+  `tini`, `curl`, snapshot-pinned `libc-bin`/`getent`, and Ploinky
+  dependency-cache tools (`git`, `make`, `g++`); source lives in
   `AssistOS-AI/container-image-builds`
 - `scripts/start-livekit-server-agent.sh` — in-container supervisor
 - `scripts/hooks/preinstall.sh` — host-side generator for runtime config
-- `scripts/health/livekit-server-agent-health.sh` — operator smoke check
+- `readiness.sh` — root-level Ploinky readiness probe (TCP reachability of
+  Redis, LiveKit Server, and Egress)
 
 ## Profiles
 
-| Profile | Network                  | Health port (host) | LiveKit signaling | Consumer URL pattern                                |
-|---------|--------------------------|--------------------|-------------------|-----------------------------------------------------|
-| default | bridge `webmeet`         | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://liveKitServerAgent:7880`, `:7980`           |
-| dev     | bridge `webmeet`         | 127.0.0.1:17000    | 0.0.0.0:17880     | `http://liveKitServerAgent:17880`, `:7980`          |
-| prod    | host networking          | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://host.containers.internal:7880`/`:7980`      |
+| Profile | Networks | LiveKit media (host) | Consumer URL pattern |
+|---------|----------|----------------------|----------------------|
+| default | primary `webmeet-signaling`, secondary `webmeet-turn` | none (TURN relay-only) | `http://livekitserveragent:7880` on `webmeet-signaling` |
+| dev | primary `webmeet-signaling`, secondary `webmeet-turn` | none (TURN relay-only) | `http://livekitserveragent:7880` on `webmeet-signaling` |
+| prod | primary `webmeet-signaling`, secondary `webmeet-turn` | `0.0.0.0:7881`, `0.0.0.0:7882-7892/udp` | `http://livekitserveragent:7880` on `webmeet-signaling` |
 
-Default and dev generated LiveKit config advertise the detected workstation
-IPv4 address as the SFU ICE node address unless `WEBMEET_LIVEKIT_NODE_IP` is
-explicitly set. `WEBMEET_LOCAL_PUBLIC_HOST` overrides detection. Browser-facing
-LiveKit media and TURN ports are intentionally LAN-published in these local
-profiles because Firefox on macOS/Podman does not reliably connect through
-loopback-only ICE candidates.
-
-Sibling bridge consumers reach the agent through the single network alias
-`liveKitServerAgent` in default/dev. In prod, the agent uses host networking
-and consumers must use `host.containers.internal` (or `127.0.0.1` from a
-host-network consumer).
+Signaling (port `7880`) is **not** published to the host in any profile
+anymore; it is only reachable over the `webmeet-signaling` bridge at the
+automatic `livekitserveragent` alias. Ploinky derives that alias from the
+canonical agent ID; the manifest does not declare aliases. The separate
+`webmeet-turn` attachment is the only trust zone shared with `turnServerAgent`.
+`basic/web-publishing` is the signaling edge that proxies to it. Only
+production WebRTC media is published directly to the host. Local
+`default`/`dev` profiles use deterministic relay-only media: the browser
+reaches TURN on host loopback, and TURN relays to LiveKit's exact `webmeet-turn`
+IPv4 address. Local LAN/multi-machine browser access is outside this profile
+contract; there is no hidden host-IP or port-publication override.
 
 ## Validation
 
@@ -73,6 +95,7 @@ cd ../
 find liveKitServerAgent -name '*.json' -print0 | xargs -0 -n1 python3 -m json.tool >/dev/null
 bash -n liveKitServerAgent/scripts/start-livekit-server-agent.sh
 bash -n liveKitServerAgent/scripts/hooks/preinstall.sh
+bash -n liveKitServerAgent/readiness.sh
 ```
 
 To build the image locally with Docker:

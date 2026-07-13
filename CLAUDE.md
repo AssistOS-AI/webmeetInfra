@@ -3,9 +3,11 @@
 ## Scope
 
 webmeetInfra is a standalone Ploinky repo for the WebMeet media runtime. It
-ships a single agent, `liveKitServerAgent`, which supervises Redis, Coturn,
-LiveKit Server, LiveKit Egress, and (in the `prod` profile) Nginx + Certbot
-inside one container.
+ships two agents: `liveKitServerAgent`, which supervises Redis, LiveKit
+Server, and LiveKit Egress inside one container, and `turnServerAgent`, which
+runs Coturn as a dedicated TURN/STUN relay with shared-secret REST/ephemeral
+auth. Neither agent runs Nginx or Certbot; the WebMeet signaling edge lives in
+`basic/web-publishing`, a different repository.
 
 ## Mandatory Reading Order
 
@@ -14,7 +16,8 @@ inside one container.
 3. Read `docs/specs/matrix.md` and the relevant local DS files before changing behavior.
 4. Read `docs/specs/DS003-ploinky-runtime-invariants.md` before touching auth, routing, guest access, MCP, HTTP services, files, logs, or runtime configuration.
 5. Read `docs/specs/DS002-livekit-server-agent.md` for the `liveKitServerAgent` contract.
-6. Read `docs/specs/DS001-coding-style.md` for coding style, module structure, and test-organization rules when that file exists; otherwise inherit the parent repository coding-style authority.
+6. Read `docs/specs/DS004-turn-server-agent.md` for the `turnServerAgent` contract (shared secret, peer ACL, production TLS).
+7. Read `docs/specs/DS001-coding-style.md` for coding style, module structure, and test-organization rules when that file exists; otherwise inherit the parent repository coding-style authority.
 
 ## Current Skill Catalog
 
@@ -33,15 +36,16 @@ inside one container.
 
 ## Runtime Defaults
 
-Infrastructure runs as a single Ploinky agent started by consumers
-(`webmeetAgent`, `webmeetLivekitAiAgent`). It owns media/runtime services only
-and must not implement application guest policy. The supervisor inside the
-container starts dependencies in order (Redis → Coturn → LiveKit Server →
-LiveKit Egress → optional Nginx/Certbot) and exposes a small TCP health
-endpoint on `WEBMEET_INFRA_HEALTH_PORT` (default 17000) as the readiness
-target.
+Infrastructure runs as two Ploinky agents started by consumers
+(`webmeetAgent`, `webmeetLivekitAiAgent`). Both own media/runtime services only
+and must not implement application guest policy. `liveKitServerAgent`'s
+supervisor starts Redis → LiveKit Server → LiveKit Egress in order;
+`turnServerAgent`'s supervisor starts only `turnserver`. Neither publishes a
+health port anymore; both use a manifest `start` command and declare
+`health.readiness.script` (a root-level `readiness.sh` in each agent
+directory) instead of an MCP `agent` command or `readiness.protocol`.
 
-The supervisor must not try to launch sibling Ploinky agents. Manifest `enable`
+Neither supervisor may try to launch sibling Ploinky agents. Manifest `enable`
 edges are resolved by Ploinky before the container exists; an in-container
 process has no view of the host runtime and cannot spawn additional agents.
 
@@ -52,8 +56,12 @@ process has no view of the host runtime and cannot spawn additional agents.
 - `../container-image-builds/images/livekit-server-agent/Dockerfile` — centralized image definition for the `liveKitServerAgent` build context
 - `liveKitServerAgent/scripts/start-livekit-server-agent.sh`
 - `liveKitServerAgent/scripts/hooks/preinstall.sh`
-- `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh`
+- `liveKitServerAgent/readiness.sh`
 - `../container-image-builds/.github/workflows/publish-livekit-server-agent.yml` — centralized Docker Hub publish workflow
+- `turnServerAgent/manifest.json`
+- `turnServerAgent/scripts/start-turn-server-agent.sh`
+- `turnServerAgent/scripts/hooks/preinstall.sh`
+- `turnServerAgent/readiness.sh`
 
 ## Validation
 

@@ -1,207 +1,225 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-workspace_root="$PLOINKY_WORKSPACE_ROOT"
+umask 077
+
+workspace_root="${PLOINKY_WORKSPACE_ROOT:?PLOINKY_WORKSPACE_ROOT is required}"
 profile="${PLOINKY_PROFILE:-default}"
 agent_dir="${workspace_root}/.data/liveKitServerAgent/generated"
 data_dir="${workspace_root}/.ploinky/data/webmeet"
-tls_dir="${workspace_root}/.ploinky/data/webmeetTls"
 
-mkdir -p \
-    "$agent_dir" \
-    "$data_dir/redis" \
-    "$data_dir/recordings" \
-    "$tls_dir/letsencrypt" \
-    "$tls_dir/webroot"
-
-is_ipv4() {
-    printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+fail() {
+    printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
+    exit 1
 }
 
-is_loopback_host() {
-    case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
-        ''|localhost|127.*|::1|'[::1]')
-            return 0
+ensure_confined_directory() {
+    local root="$1" target="$2" label="$3" relative current part old_ifs root_real target_real
+    case "$target" in
+        "$root"/*)
+            relative="${target#"$root"/}"
+            ;;
+        *)
+            fail "$label must remain below PLOINKY_WORKSPACE_ROOT."
+            ;;
+    esac
+    current="$root"
+    if [ -L "$current" ]; then
+        fail "$label cannot use a symlinked workspace root."
+    fi
+    old_ifs="$IFS"
+    IFS='/'
+    # shellcheck disable=SC2086
+    set -- $relative
+    IFS="$old_ifs"
+    for part in "$@"; do
+        current="${current}/${part}"
+        if [ -L "$current" ]; then
+            fail "$label cannot contain symlinked path components ('$current')."
+        fi
+    done
+    mkdir -p "$target"
+    root_real="$(cd "$root" && pwd -P)" || fail "could not resolve PLOINKY_WORKSPACE_ROOT."
+    target_real="$(cd "$target" && pwd -P)" || fail "could not resolve $label."
+    case "$target_real" in
+        "$root_real"/*)
+            ;;
+        *)
+            fail "$label resolved outside PLOINKY_WORKSPACE_ROOT."
+            ;;
+    esac
+}
+
+ensure_confined_directory "$workspace_root" "$agent_dir" "LiveKit generated-config directory"
+ensure_confined_directory "$workspace_root" "$data_dir/redis" "Redis data directory"
+ensure_confined_directory "$workspace_root" "$data_dir/recordings" "Egress recording directory"
+
+is_valid_ipv4_strict() {
+    local ip="$1" old_ifs octet
+    old_ifs="$IFS"
+    IFS='.'
+    # shellcheck disable=SC2086
+    set -- $ip
+    IFS="$old_ifs"
+    [ "$#" -eq 4 ] || return 1
+    for octet in "$1" "$2" "$3" "$4"; do
+        case "$octet" in
+            0|[1-9]|[1-9][0-9]|[1-9][0-9][0-9])
+                ;;
+            *)
+                return 1
+                ;;
+        esac
+        [ "$octet" -le 255 ] || return 1
+    done
+}
+
+is_valid_unicast_ipv4() {
+    local ip="$1" first second old_ifs
+    is_valid_ipv4_strict "$ip" || return 1
+    old_ifs="$IFS"
+    IFS='.'
+    # shellcheck disable=SC2086
+    set -- $ip
+    IFS="$old_ifs"
+    first="$1"
+    second="$2"
+    [ "$first" -ne 0 ] || return 1
+    [ "$first" -ne 127 ] || return 1
+    [ "$first" -lt 224 ] || return 1
+    if [ "$first" -eq 169 ] && [ "$second" -eq 254 ]; then
+        return 1
+    fi
+}
+
+is_valid_dns_hostname() {
+    local value="$1"
+    [ "${#value}" -le 253 ] || return 1
+    printf '%s' "$value" \
+        | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
+}
+
+is_valid_public_dns_hostname() {
+    local value="$1" lower
+    is_valid_dns_hostname "$value" || return 1
+    case "$value" in
+        *.*)
             ;;
         *)
             return 1
             ;;
     esac
+    case "$value" in
+        *[!0-9.]* )
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
+    case "$lower" in
+        localhost|*.localhost|*.local)
+            return 1
+            ;;
+    esac
 }
 
-host_from_url() {
-    printf '%s' "${1:-}" \
-        | sed -E 's#^[A-Za-z][A-Za-z0-9+.-]*://##; s#/.*$##; s#^\[([^]]+)\].*$#\1#; s#:([0-9]+)$##'
-}
-
-is_loopback_url() {
-    is_loopback_host "$(host_from_url "$1")"
-}
-
-detect_local_public_host() {
-    local override="${WEBMEET_LOCAL_PUBLIC_HOST:-}"
-    local iface candidate
-    if [ -n "$override" ] && [ "$override" != "auto" ]; then
-        printf '%s\n' "$override"
-        return 0
-    fi
-
-    if command -v route >/dev/null 2>&1 && command -v ipconfig >/dev/null 2>&1; then
-        iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')"
-        if [ -n "$iface" ]; then
-            candidate="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
-            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
-                printf '%s\n' "$candidate"
-                return 0
-            fi
-        fi
-    fi
-
-    if command -v ipconfig >/dev/null 2>&1; then
-        for iface in en0 en1; do
-            candidate="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
-            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
-                printf '%s\n' "$candidate"
-                return 0
-            fi
-        done
-    fi
-
-    if command -v ip >/dev/null 2>&1; then
-        candidate="$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
-        if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
-    fi
-
-    if command -v hostname >/dev/null 2>&1; then
-        for candidate in $(hostname -I 2>/dev/null || true); do
-            if is_ipv4 "$candidate" && ! is_loopback_host "$candidate"; then
-                printf '%s\n' "$candidate"
-                return 0
-            fi
-        done
-    fi
-
-    return 1
-}
-
-set_workspace_var() {
+validate_generated_hex_secret() {
     local name="$1" value="$2"
-    if command -v ploinky >/dev/null 2>&1; then
-        ploinky var "$name" "$value" >/dev/null
+    if [ "${#value}" -ne 64 ] || ! printf '%s' "$value" | grep -Eq '^[0-9a-f]{64}$'; then
+        fail "$name must be the 64-character lowercase hexadecimal value generated by Ploinky."
     fi
 }
 
-seed_webmeet_browser_vars() {
-    local public_host="$1" signal="$2"
-    local current_livekit_url="${WEBMEET_PUBLIC_LIVEKIT_URL:-}"
-    local current_turn_external_ip="${WEBMEET_TURN_EXTERNAL_IP:-}"
-    local current_turn_host="${WEBMEET_TURN_HOST:-}"
-
-    if [ -z "$current_livekit_url" ] || is_loopback_url "$current_livekit_url"; then
-        set_workspace_var WEBMEET_PUBLIC_LIVEKIT_URL "ws://${public_host}:${signal}"
+validate_bounded_positive_int() {
+    local name="$1" value="$2" maximum="$3"
+    case "$value" in
+        ''|*[!0-9]*)
+            fail "$name must be a positive integer (got '$value')."
+            ;;
+    esac
+    if [ "${#value}" -gt "${#maximum}" ]; then
+        fail "$name must not exceed $maximum (got '$value')."
     fi
-    if [ -z "$current_turn_external_ip" ] || is_loopback_host "$current_turn_external_ip"; then
-        set_workspace_var WEBMEET_TURN_EXTERNAL_IP "$public_host"
+    if [ "$value" -le 0 ]; then
+        fail "$name must be greater than zero (got '$value')."
     fi
-    if [ -z "$current_turn_host" ] || is_loopback_host "$current_turn_host"; then
-        set_workspace_var WEBMEET_TURN_HOST "$public_host"
+    if [ "$value" -gt "$maximum" ]; then
+        fail "$name must not exceed $maximum (got '$value')."
     fi
 }
 
 api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
 api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
-turn_password="${WEBMEET_TURN_PASSWORD:?WEBMEET_TURN_PASSWORD is required}"
-log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-info}"
+turn_secret="${WEBMEET_TURN_AUTH_SECRET:?WEBMEET_TURN_AUTH_SECRET is required}"
+turn_ttl="${WEBMEET_TURN_CREDENTIAL_TTL_SECONDS:-29100}"
+log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-warn}"
 force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
-use_external_ip_default="false"
-node_ip="${WEBMEET_LIVEKIT_NODE_IP:-}"
-local_public_host="$(detect_local_public_host || true)"
+redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"
+egress_ws_url="${WEBMEET_LIVEKIT_INTERNAL_WS_URL:-ws://127.0.0.1:7880}"
+egress_redis_address="${WEBMEET_EGRESS_REDIS_ADDRESS:-127.0.0.1:6379}"
+
+validate_generated_hex_secret WEBMEET_LIVEKIT_API_KEY "$api_key"
+validate_generated_hex_secret WEBMEET_LIVEKIT_API_SECRET "$api_secret"
+validate_generated_hex_secret WEBMEET_TURN_AUTH_SECRET "$turn_secret"
+validate_bounded_positive_int WEBMEET_TURN_CREDENTIAL_TTL_SECONDS "$turn_ttl" 86400
+case "$log_level" in
+    debug|info|warn|error)
+        ;;
+    *)
+        fail "WEBMEET_LIVEKIT_LOG_LEVEL must be debug, info, warn, or error."
+        ;;
+esac
+if [ "$log_level" = "debug" ] || [ "$log_level" = "info" ]; then
+    printf '[liveKitServerAgent] WARNING: %s logging can include SDP ICE credentials and candidate addresses; use only for explicit sensitive diagnostics.\n' "$log_level" >&2
+fi
+case "$force_tcp" in
+    true|false)
+        ;;
+    *)
+        fail "WEBMEET_LIVEKIT_FORCE_TCP must be true or false."
+        ;;
+esac
 
 signal_port=7880
 rtc_tcp_port=7881
 rtc_port_range_start=7882
 rtc_port_range_end=7892
-health_port="${WEBMEET_INFRA_HEALTH_PORT:-17000}"
-turn_listen_port="${WEBMEET_TURN_PORT:-3478}"
-turn_min_port="${WEBMEET_TURN_MIN_PORT:-20000}"
-turn_max_port="${WEBMEET_TURN_MAX_PORT:-20010}"
-turn_realm="${WEBMEET_TURN_REALM:-webmeet.local}"
-turn_user="${WEBMEET_TURN_USER:-webmeet}"
-turn_external_ip="${WEBMEET_TURN_EXTERNAL_IP:-}"
-turn_host="${WEBMEET_TURN_HOST:-}"
+node_ip=""
 
 case "$profile" in
-    default)
-        local_public_host="${local_public_host:-127.0.0.1}"
-        if [ -z "$node_ip" ] || is_loopback_host "$node_ip"; then
-            node_ip="$local_public_host"
+    default|dev)
+        turn_host="${WEBMEET_TURN_HOST:-127.0.0.1}"
+        node_ip="__WEBMEET_LOCAL_NODE_IP__"
+        if ! is_valid_ipv4_strict "$turn_host" && ! is_valid_dns_hostname "$turn_host"; then
+            fail "WEBMEET_TURN_HOST must be an IPv4 address or DNS hostname; got '$turn_host'."
         fi
-        if [ -z "$turn_external_ip" ] || is_loopback_host "$turn_external_ip"; then
-            turn_external_ip="$local_public_host"
-        fi
-        if [ -z "$turn_host" ] || is_loopback_host "$turn_host"; then
-            turn_host="$local_public_host"
-        fi
-        seed_webmeet_browser_vars "$local_public_host" "$signal_port"
-        ;;
-    dev)
-        signal_port=17880
-        rtc_tcp_port=17881
-        rtc_port_range_start=17882
-        rtc_port_range_end=17892
-        local_public_host="${local_public_host:-127.0.0.1}"
-        if [ -z "$node_ip" ] || is_loopback_host "$node_ip"; then
-            node_ip="$local_public_host"
-        fi
-        if [ -z "$turn_external_ip" ] || is_loopback_host "$turn_external_ip"; then
-            turn_external_ip="$local_public_host"
-        fi
-        if [ -z "$turn_host" ] || is_loopback_host "$turn_host"; then
-            turn_host="$local_public_host"
-        fi
-        seed_webmeet_browser_vars "$local_public_host" "$signal_port"
         ;;
     prod)
-        use_external_ip_default="true"
-        turn_external_ip="${turn_external_ip:-auto}"
-        turn_host="${turn_host:-livekit-skills.axiologic.dev}"
+        turn_host="${WEBMEET_TURN_HOST:?WEBMEET_TURN_HOST is required in the prod profile}"
+        node_ip="${WEBMEET_LIVEKIT_NODE_IP:?WEBMEET_LIVEKIT_NODE_IP is required in the prod profile}"
+        if ! is_valid_public_dns_hostname "$turn_host"; then
+            fail "WEBMEET_TURN_HOST must be a public multi-label DNS hostname (not an IP literal, localhost, or .local name); got '$turn_host'."
+        fi
+        if ! is_valid_unicast_ipv4 "$node_ip"; then
+            fail "WEBMEET_LIVEKIT_NODE_IP must be a unicast IPv4 address (not unspecified, loopback, link-local, or multicast); got '$node_ip'."
+        fi
+        ;;
+    *)
+        fail "unknown PLOINKY_PROFILE '$profile'."
         ;;
 esac
 
-turn_external_ip="${turn_external_ip:-127.0.0.1}"
-turn_host="${turn_host:-127.0.0.1}"
-
-use_external_ip="${WEBMEET_LIVEKIT_USE_EXTERNAL_IP:-$use_external_ip_default}"
-redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"
-egress_ws_url="${WEBMEET_LIVEKIT_INTERNAL_WS_URL:-ws://127.0.0.1:${signal_port}}"
-egress_redis_address="${WEBMEET_EGRESS_REDIS_ADDRESS:-127.0.0.1:6379}"
-
-validate_port() {
-    local name="$1" value="$2"
-    case "$value" in
-        ''|*[!0-9]*)
-            echo "[liveKitServerAgent] ERROR: $name must be a positive integer (got '$value')." >&2
-            exit 1
-            ;;
-    esac
-    if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
-        echo "[liveKitServerAgent] ERROR: $name must be in 1..65535 (got '$value')." >&2
-        exit 1
-    fi
+livekit_tmp=""
+egress_tmp=""
+redis_tmp=""
+cleanup_temps() {
+    rm -f "${livekit_tmp:-}" "${egress_tmp:-}" "${redis_tmp:-}"
 }
-
-validate_port WEBMEET_INFRA_HEALTH_PORT "$health_port"
-validate_port WEBMEET_TURN_PORT "$turn_listen_port"
-validate_port WEBMEET_TURN_MIN_PORT "$turn_min_port"
-validate_port WEBMEET_TURN_MAX_PORT "$turn_max_port"
-
-if [ "$turn_min_port" -gt "$turn_max_port" ]; then
-    echo "[liveKitServerAgent] ERROR: WEBMEET_TURN_MIN_PORT > WEBMEET_TURN_MAX_PORT." >&2
-    exit 1
-fi
+trap cleanup_temps EXIT
+livekit_tmp="$(mktemp "${agent_dir}/.livekit.yaml.XXXXXX")" || fail "could not create a private LiveKit config file."
+egress_tmp="$(mktemp "${agent_dir}/.egress.yaml.XXXXXX")" || fail "could not create a private Egress config file."
+redis_tmp="$(mktemp "${agent_dir}/.redis.conf.XXXXXX")" || fail "could not create a private Redis config file."
 
 {
     printf 'port: %s\n' "$signal_port"
@@ -210,14 +228,25 @@ fi
     printf '  tcp_port: %s\n' "$rtc_tcp_port"
     printf '  port_range_start: %s\n' "$rtc_port_range_start"
     printf '  port_range_end: %s\n' "$rtc_port_range_end"
-    printf '  use_external_ip: %s\n' "$use_external_ip"
+    printf '  use_external_ip: false\n'
     printf '  force_tcp: %s\n' "$force_tcp"
-    if [ -n "$node_ip" ] && [ "$use_external_ip" != "true" ]; then
-        printf '  node_ip: %s\n' "$node_ip"
+    printf '  node_ip: %s\n' "$node_ip"
+    printf '  turn_servers:\n'
+    printf '    - host: "%s"\n' "$turn_host"
+    printf '      port: 3478\n'
+    printf '      protocol: udp\n'
+    printf '      secret: "%s"\n' "$turn_secret"
+    printf '      ttl: %s\n' "$turn_ttl"
+    if [ "$profile" = "prod" ]; then
+        printf '    - host: "%s"\n' "$turn_host"
+        printf '      port: 443\n'
+        printf '      protocol: tls\n'
+        printf '      secret: "%s"\n' "$turn_secret"
+        printf '      ttl: %s\n' "$turn_ttl"
     fi
     printf 'redis:\n  address: %s\n' "$redis_address"
     printf 'keys:\n  %s: %s\n' "$api_key" "$api_secret"
-} > "${agent_dir}/livekit.yaml"
+} > "$livekit_tmp"
 
 {
     printf 'api_key: %s\n' "$api_key"
@@ -226,7 +255,7 @@ fi
     printf 'insecure: true\n'
     printf 'redis:\n  address: %s\n' "$egress_redis_address"
     printf 'health_port: 7980\n'
-} > "${agent_dir}/egress.yaml"
+} > "$egress_tmp"
 
 {
     printf 'bind 127.0.0.1\n'
@@ -235,112 +264,26 @@ fi
     printf 'save 60 1\n'
     printf 'loglevel warning\n'
     printf 'appendonly no\n'
-} > "${agent_dir}/redis.conf"
+} > "$redis_tmp"
 
-{
-    printf 'listening-port=%s\n' "$turn_listen_port"
-    printf 'min-port=%s\n' "$turn_min_port"
-    printf 'max-port=%s\n' "$turn_max_port"
-    printf 'external-ip=%s\n' "$turn_external_ip"
-    printf 'realm=%s\n' "$turn_realm"
-    printf 'fingerprint\n'
-    printf 'lt-cred-mech\n'
-    printf 'no-cli\n'
-    printf 'no-tls\n'
-    printf 'no-dtls\n'
-    printf 'user=%s:%s\n' "$turn_user" "$turn_password"
-    if [ "$turn_host" != "$turn_external_ip" ] && [ "$turn_external_ip" = "auto" ]; then
-        # The supervisor script will resolve WEBMEET_TURN_HOST at runtime when
-        # external IP is 'auto'; coturn config still needs a static fallback.
-        printf '# external-ip resolved dynamically at startup\n'
+chmod 0600 \
+    "$livekit_tmp" \
+    "$egress_tmp" \
+    "$redis_tmp"
+
+# Same-directory atomic renames replace pre-existing leaf symlinks without
+# following them. Reject directories so mv cannot reinterpret a target as a
+# destination directory and strand a secret-bearing temporary file inside it.
+for target in livekit.yaml egress.yaml redis.conf; do
+    if [ -d "${agent_dir}/${target}" ] && [ ! -L "${agent_dir}/${target}" ]; then
+        fail "generated config target '${agent_dir}/${target}' must not be a directory."
     fi
-} > "${agent_dir}/turnserver.conf"
-
-if [ "$profile" = "prod" ]; then
-    hostname="${WEBMEET_TLS_HOSTNAME:?WEBMEET_TLS_HOSTNAME is required in prod profile}"
-    http_port="${WEBMEET_TLS_HTTP_PORT:-80}"
-    https_port="${WEBMEET_TLS_HTTPS_PORT:-443}"
-    upstream="${WEBMEET_LIVEKIT_UPSTREAM:-http://127.0.0.1:7880}"
-
-    validate_port WEBMEET_TLS_HTTP_PORT "$http_port"
-    validate_port WEBMEET_TLS_HTTPS_PORT "$https_port"
-
-    if ! printf '%s' "$hostname" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'; then
-        echo "[liveKitServerAgent] ERROR: WEBMEET_TLS_HOSTNAME is not a valid DNS name (got '$hostname')." >&2
-        exit 1
-    fi
-
-    if ! printf '%s' "$upstream" | grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/[A-Za-z0-9._/-]*)?$'; then
-        echo "[liveKitServerAgent] ERROR: WEBMEET_LIVEKIT_UPSTREAM must be http(s)://host[:port][/path] (got '$upstream')." >&2
-        exit 1
-    fi
-
-    cat > "${agent_dir}/livekit.conf" <<EOF
-server {
-    listen ${http_port} default_server;
-    server_name ${hostname};
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/certbot;
-    }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen ${https_port} ssl;
-    server_name ${hostname};
-
-    ssl_certificate /etc/letsencrypt/live/${hostname}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${hostname}/privkey.pem;
-
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-
-    location / {
-        proxy_pass ${upstream};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-}
-EOF
-
-    cat > "${agent_dir}/nginx.conf" <<'NGINXEOF'
-worker_processes auto;
-error_log /var/log/nginx/error.log warn;
-pid /run/nginx-livekit.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    sendfile on;
-    keepalive_timeout 65;
-
-    include /working-data/generated/livekit.conf;
-}
-NGINXEOF
-fi
-
-# Mirror the canonical startup script into the workspace so operators can
-# inspect or override it without rebuilding the container image.
-script_src_dir="$(cd "$(dirname "$0")/.." && pwd)"
-if [ -d "$script_src_dir" ]; then
-    mkdir -p "${agent_dir}/scripts/health"
-    cp "$script_src_dir/start-livekit-server-agent.sh" "${agent_dir}/scripts/start-livekit-server-agent.sh"
-    cp "$script_src_dir/health/livekit-server-agent-health.sh" "${agent_dir}/scripts/health/livekit-server-agent-health.sh"
-    chmod +x "${agent_dir}/scripts/start-livekit-server-agent.sh"
-    chmod +x "${agent_dir}/scripts/health/livekit-server-agent-health.sh"
-fi
+done
+rm -f "${agent_dir}/livekit.yaml" "${agent_dir}/egress.yaml" "${agent_dir}/redis.conf"
+mv "$livekit_tmp" "${agent_dir}/livekit.yaml"
+livekit_tmp=""
+mv "$egress_tmp" "${agent_dir}/egress.yaml"
+egress_tmp=""
+mv "$redis_tmp" "${agent_dir}/redis.conf"
+redis_tmp=""
+trap - EXIT
