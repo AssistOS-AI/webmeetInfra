@@ -23,7 +23,9 @@ as the build context, uses the centralized Dockerfile from
 `container-image-builds/images/livekit-server-agent/Dockerfile`, and publishes
 `linux/amd64` and `linux/arm64` variants under the same tag. It also exposes and
 validates the pushed manifest digest, then reports the immutable image reference
-in the workflow log and summary without moving consumer manifests. Authentication
+in the workflow log and summary. The consumer manifest is pinned separately to
+`sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8`.
+Authentication
 uses the `DOCKERHUB_TOKEN` GitHub Actions secret in
 `AssistOS-AI/container-image-builds`; never commit token values to any repo.
 `turnServerAgent` pulls the upstream `docker.io/coturn/coturn` image directly,

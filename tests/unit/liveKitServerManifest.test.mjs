@@ -21,6 +21,10 @@ function findEnv(profile, name) {
 
 test('liveKitServerAgent uses script readiness and never republishes private control-plane ports', () => {
     const manifest = readManifest();
+    assert.equal(
+        manifest.container,
+        'docker.io/assistos/livekit-server-agent:webmeet-infra@sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8',
+    );
     assert.equal(manifest.start, 'sh /code/scripts/start-livekit-server-agent.sh');
     assert.equal(Object.hasOwn(manifest, 'agent'), false);
     assert.equal(Object.hasOwn(manifest, 'readiness'), false);

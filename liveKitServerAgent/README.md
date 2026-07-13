@@ -42,8 +42,9 @@ only manage processes that already exist inside this image.
 assistos/livekit-server-agent:webmeet-infra
 ```
 
-The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
-directly as the default runtime image for every profile.
+The manifest pulls
+`docker.io/assistos/livekit-server-agent:webmeet-infra@sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8`
+as the immutable default runtime image for every profile.
 
 The image is published through `publish-livekit-server-agent.yml` in
 `AssistOS-AI/container-image-builds` (manual `workflow_dispatch` only). That
