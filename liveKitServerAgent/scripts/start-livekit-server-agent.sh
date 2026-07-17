@@ -1,199 +1,171 @@
 #!/bin/sh
 set -eu
 
-# Preinstall has already materialized the required private configs. Re-exec
-# immediately without secrets that the supervisor and its children never need,
-# so long-lived process environments do not duplicate those credentials.
-if [ "${WEBMEET_RUNTIME_ENV_SCRUBBED:-}" != "1" ]; then
-    exec env \
-        -u WEBMEET_TURN_AUTH_SECRET \
-        -u WEBMEET_LIVEKIT_API_KEY \
-        -u WEBMEET_LIVEKIT_API_SECRET \
-        WEBMEET_RUNTIME_ENV_SCRUBBED=1 \
-        sh "$0" "$@"
-fi
-
 GENERATED_DIR="/working-data/generated"
-LIVEKIT_TEMPLATE="${GENERATED_DIR}/livekit.yaml"
+LIVEKIT_CONFIG="${GENERATED_DIR}/livekit.yaml"
 EGRESS_CONFIG="${GENERATED_DIR}/egress.yaml"
 REDIS_CONFIG="${GENERATED_DIR}/redis.conf"
-PROFILE="${PLOINKY_PROFILE:-default}"
-RUNTIME_DIR="$(mktemp -d /tmp/livekit-server-agent.XXXXXX)"
-LIVEKIT_CONFIG="${RUNTIME_DIR}/livekit.yaml"
-
-REDIS_DATA_DIR="/data/redis"
-RECORDING_DIR="/data/recordings"
-WAIT_FOR_TIMEOUT=30
-
-mkdir -p "$REDIS_DATA_DIR" "$RECORDING_DIR"
+SUPERVISOR_SOCKET="/run/ploinky/livekit-supervisor.sock"
+WAIT_FOR_TIMEOUT="${LIVEKIT_INFRA_WAIT_TIMEOUT:-45}"
+EGRESS_CONTRACT="/usr/local/share/ploinky/livekit-egress-loopback-v5.contract"
 
 PIDS=""
 
 log() {
-    printf '[liveKitServerAgent] %s\n' "$1"
+  printf '[liveKitServerAgent] %s\n' "$1"
 }
 
-err() {
-    printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
+fail() {
+  printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
+  exit 1
 }
 
 require_file() {
-    if [ ! -f "$1" ]; then
-        err "missing generated file '$1'; ensure preinstall ran"
-        exit 1
-    fi
+  [ -s "$1" ] || fail "missing generated file '$1'; the topology-driven preinstall hook must succeed first"
 }
 
-require_file "$LIVEKIT_TEMPLATE"
-require_file "$EGRESS_CONFIG"
-require_file "$REDIS_CONFIG"
-
-command -v nc >/dev/null 2>&1 || {
-    err "pinned image is missing nc"
-    exit 1
+assert_egress_image_contract() {
+  if [ ! -f "$EGRESS_CONTRACT" ] || [ -L "$EGRESS_CONTRACT" ]; then
+    fail "LiveKit Egress v5 image contract marker is missing; publish the loopback-patched Egress image, rebuild the LiveKit image, and pin its verified index before activation"
+  fi
+  if [ "$(stat -c '%u:%g:%a' "$EGRESS_CONTRACT")" != '0:0:444' ]; then
+    fail "LiveKit Egress v5 image contract marker ownership or mode is invalid"
+  fi
+  if [ "$(sed -n '1p' "$EGRESS_CONTRACT")" != 'contract_version=5' ] \
+    || [ "$(sed -n '2p' "$EGRESS_CONTRACT")" != 'source_commit=ba52a026bea409bde31dcc7da9ba5322e967520c' ] \
+    || [ "$(sed -n '3p' "$EGRESS_CONTRACT")" != 'health_listener=127.0.0.1:7981' ] \
+    || [ "$(sed -n '4p' "$EGRESS_CONTRACT")" != 'template_listener=127.0.0.1:7980' ] \
+    || [ "$(wc -l < "$EGRESS_CONTRACT")" -ne 5 ]; then
+    fail "LiveKit Egress v5 image contract marker does not match the approved runtime contract"
+  fi
+  expected_egress_sha256="$(sed -n 's/^binary_sha256=//p' "$EGRESS_CONTRACT")"
+  case "$expected_egress_sha256" in
+    *[!0-9a-f]*|'') fail "LiveKit Egress v5 image contract contains an invalid binary digest" ;;
+  esac
+  if [ "${#expected_egress_sha256}" -ne 64 ]; then
+    fail "LiveKit Egress v5 image contract contains an invalid binary digest"
+  fi
+  if ! printf '%s  %s\n' "$expected_egress_sha256" /usr/bin/egress | sha256sum --check --strict - >/dev/null 2>&1; then
+    fail "LiveKit Egress binary digest does not match its v5 image contract"
+  fi
 }
-
-is_ipv4() {
-    printf '%s' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
-}
-
-resolve_local_node_ip() {
-    command -v getent >/dev/null 2>&1 || {
-        err "getent is required to resolve the TURN trust-zone peer"
-        return 1
-    }
-    command -v ip >/dev/null 2>&1 || {
-        err "ip is required to select the local LiveKit TURN trust-zone address"
-        return 1
-    }
-    attempt=0
-    while [ "$attempt" -lt "$WAIT_FOR_TIMEOUT" ]; do
-        peer_addresses="$(getent ahostsv4 turnserveragent 2>/dev/null \
-            | awk '{print $1}' \
-            | sort -u \
-            | sed '/^$/d' || true)"
-        peer_count="$(printf '%s\n' "$peer_addresses" | sed '/^$/d' | wc -l | tr -d '[:space:]')"
-        if [ "$peer_count" = "1" ] && is_ipv4 "$peer_addresses"; then
-            local_address="$(ip -4 route get "$peer_addresses" 2>/dev/null \
-                | awk '{ for (i = 1; i <= NF; i++) if ($i == "src" && (i + 1) <= NF) { print $(i + 1); exit } }' \
-                || true)"
-            if is_ipv4 "$local_address"; then
-                printf '%s\n' "$local_address"
-                return 0
-            fi
-        fi
-        attempt=$((attempt + 1))
-        sleep 1
-    done
-    err "turnserveragent did not resolve to one reachable TURN trust-zone IPv4 address within ${WAIT_FOR_TIMEOUT}s"
-    return 1
-}
-
-prepare_livekit_config() {
-    cp "$LIVEKIT_TEMPLATE" "$LIVEKIT_CONFIG"
-    chmod 0600 "$LIVEKIT_CONFIG"
-    case "$PROFILE" in
-        default|dev)
-            local_node_ip="$(resolve_local_node_ip)" || exit 1
-            marker_count="$(grep -c '__WEBMEET_LOCAL_NODE_IP__' "$LIVEKIT_CONFIG" || true)"
-            [ "$marker_count" = "1" ] || {
-                err "local LiveKit config must contain exactly one node-IP marker"
-                exit 1
-            }
-            sed "s/__WEBMEET_LOCAL_NODE_IP__/${local_node_ip}/" "$LIVEKIT_CONFIG" > "${LIVEKIT_CONFIG}.resolved"
-            chmod 0600 "${LIVEKIT_CONFIG}.resolved"
-            mv "${LIVEKIT_CONFIG}.resolved" "$LIVEKIT_CONFIG"
-            log "resolved local relay-only LiveKit media address on the webmeet-turn bridge"
-            ;;
-        prod)
-            if grep -q '__WEBMEET_LOCAL_NODE_IP__' "$LIVEKIT_CONFIG"; then
-                err "prod LiveKit config contains a local node-IP marker"
-                exit 1
-            fi
-            ;;
-        *)
-            err "unknown PLOINKY_PROFILE '$PROFILE'"
-            exit 1
-            ;;
-    esac
-}
-
-prepare_livekit_config
 
 wait_for_tcp() {
-    label="$1"
-    host="$2"
-    port="$3"
-    deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
-    while [ "$(date +%s)" -lt "$deadline" ]; do
-        if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then
-            log "$label is ready on $host:$port"
-            return 0
-        fi
-        sleep 1
-    done
-    err "$label did not become ready on $host:$port within ${WAIT_FOR_TIMEOUT}s"
-    return 1
+  label="$1"
+  host="$2"
+  port="$3"
+  deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then
+      log "$label is ready on $host:$port"
+      return 0
+    fi
+    sleep 1
+  done
+  fail "$label did not become ready on $host:$port within ${WAIT_FOR_TIMEOUT}s"
 }
 
-start_redis() {
-    log "starting redis"
-    redis-server "$REDIS_CONFIG" --dir "$REDIS_DATA_DIR" &
-    REDIS_PID=$!
-    PIDS="$PIDS $REDIS_PID"
-    wait_for_tcp "redis" 127.0.0.1 6379
+wait_for_udp_owner() {
+  deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if ss -H -lunp 2>/dev/null | awk '$4 ~ /:7882$/ && /livekit-server/ { found=1 } END { exit(found ? 0 : 1) }'; then
+      log "livekit-server owns the fixed UDP mux on 0.0.0.0:7882"
+      return 0
+    fi
+    sleep 1
+  done
+  fail "livekit-server did not acquire the fixed UDP mux 7882/udp"
 }
 
-start_livekit() {
-    log "starting livekit-server"
-    livekit-server --config "$LIVEKIT_CONFIG" &
-    LIVEKIT_PID=$!
-    PIDS="$PIDS $LIVEKIT_PID"
-    wait_for_tcp "livekit-server" 127.0.0.1 7880
+assert_forbidden_listeners_absent() {
+  if ss -H -lnt 2>/dev/null | awk '$4 ~ /:(80|443|3478|5349|7881)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+    fail "a forbidden TCP listener (80, 443, 3478, 5349, or 7881) is active"
+  fi
+  if ss -H -lun 2>/dev/null | awk '$4 ~ /:(3478|5349|7883|7884|7885|7886|7887|7888|7889|7890|7891|7892)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+    fail "a forbidden local TURN or LiveKit UDP-range listener is active"
+  fi
 }
 
-start_egress() {
-    log "starting livekit-egress"
-    EGRESS_CONFIG_FILE="$EGRESS_CONFIG" egress &
-    EGRESS_PID=$!
-    PIDS="$PIDS $EGRESS_PID"
-    wait_for_tcp "livekit-egress" 127.0.0.1 7980
+assert_egress_listener() {
+  label="$1"
+  port="$2"
+  if ! ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && /users:\(\("egress"/ && ($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "$label must be owned by egress and bound only to loopback on TCP $port"
+  fi
+  if ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && !($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "$label has a non-loopback TCP $port listener"
+  fi
 }
 
 shutdown_children() {
-    log "stopping supervised services"
-    for pid in $PIDS; do
-        [ -n "$pid" ] || continue
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-        fi
-    done
-    sleep 1
-    for pid in $PIDS; do
-        [ -n "$pid" ] || continue
-        if kill -0 "$pid" 2>/dev/null; then
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-    done
-    rm -rf "$RUNTIME_DIR"
+  log "stopping supervised services"
+  for pid in $PIDS; do
+    [ -n "$pid" ] || continue
+    kill "$pid" 2>/dev/null || true
+  done
+  sleep 1
+  for pid in $PIDS; do
+    [ -n "$pid" ] || continue
+    kill -9 "$pid" 2>/dev/null || true
+  done
 }
+
+assert_egress_image_contract
+require_file "$LIVEKIT_CONFIG"
+require_file "$EGRESS_CONFIG"
+require_file "$REDIS_CONFIG"
+mkdir -p /data/redis /data/recordings /run/ploinky
+rm -f "$SUPERVISOR_SOCKET"
 
 trap 'shutdown_children; exit 0' INT TERM
 trap 'rc=$?; shutdown_children; exit $rc' EXIT
 
-start_redis
-start_livekit
-start_egress
+log "starting loopback Redis"
+redis-server "$REDIS_CONFIG" --dir /data/redis &
+REDIS_PID=$!
+PIDS="$PIDS $REDIS_PID"
+wait_for_tcp redis 127.0.0.1 6379
 
-log "all required services started"
+log "starting loopback LiveKit signaling with one UDP mux"
+livekit-server --config "$LIVEKIT_CONFIG" &
+LIVEKIT_PID=$!
+PIDS="$PIDS $LIVEKIT_PID"
+wait_for_tcp livekit 127.0.0.1 7880
+wait_for_udp_owner
+assert_forbidden_listeners_absent
 
-# Watch supervised pids; exit nonzero if any required service dies.
+log "starting LiveKit Egress (template 7980, health 7981)"
+EGRESS_CONFIG_FILE="$EGRESS_CONFIG" egress &
+EGRESS_PID=$!
+PIDS="$PIDS $EGRESS_PID"
+wait_for_tcp egress-template 127.0.0.1 7980
+wait_for_tcp egress-health 127.0.0.1 7981
+assert_egress_listener egress-template 7980
+assert_egress_listener egress-health 7981
+node /code/scripts/health/egress-semantic-health.mjs
+
+log "starting private supervisor health endpoints"
+SUPERVISED_PIDS="$REDIS_PID,$LIVEKIT_PID,$EGRESS_PID" \
+SUPERVISOR_SOCKET="$SUPERVISOR_SOCKET" \
+node /code/scripts/health/supervisor-health.mjs &
+HEALTH_PID=$!
+PIDS="$PIDS $HEALTH_PID"
+wait_for_tcp supervisor-health 127.0.0.1 17000
+
+/code/scripts/health/livekit-server-agent-health.sh
+log "all required services are ready"
+
 while true; do
-    for pid in $REDIS_PID $LIVEKIT_PID $EGRESS_PID; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            err "supervised service pid $pid exited; tearing down"
-            exit 1
-        fi
-    done
-    sleep 5
+  for pid in "$REDIS_PID" "$LIVEKIT_PID" "$EGRESS_PID" "$HEALTH_PID"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      fail "supervised service pid $pid exited"
+    fi
+  done
+  sleep 5
 done

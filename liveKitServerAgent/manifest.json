@@ -1,222 +1,94 @@
 {
-    "container": "docker.io/assistos/livekit-server-agent:webmeet-infra@sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8",
-    "about": "WebMeet media runtime: Redis, LiveKit Server, and LiveKit Egress, supervised inside one container. TURN now lives in the sibling turnServerAgent; the WebMeet signaling edge (TLS termination, Nginx) now lives in basic/web-publishing.",
-    "start": "sh /code/scripts/start-livekit-server-agent.sh",
-    "health": {
-        "readiness": {
-            "script": "readiness.sh"
-        }
-    },
-    "containerSecurity": {
-        "privileged": false
-    },
-    "network": {
-        "mode": "bridge",
-        "attachments": [
-            {
-                "name": "webmeet-signaling",
-                "primary": true
-            },
-            {
-                "name": "webmeet-turn"
-            }
-        ]
-    },
-    "volumes": {
-        ".data/liveKitServerAgent/generated": "/working-data/generated",
-        ".ploinky/data/webmeet/redis": "/data/redis",
-        ".ploinky/data/webmeet/recordings": "/data/recordings"
-    },
-    "volumeOptions": {
-        "/working-data/generated": {
-            "generated": true,
-            "required": true,
-            "chmod": 448
-        }
-    },
-    "profiles": {
-        "default": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "openPorts": [],
-            "env": [
-                {
-                    "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
-                    "required": false,
-                    "default": "warn"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
-                    "required": false,
-                    "default": "false"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
-                    "required": false,
-                    "default": "ws://127.0.0.1:7880"
-                },
-                {
-                    "name": "WEBMEET_TURN_AUTH_SECRET",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_TURN_HOST",
-                    "required": false,
-                    "default": "127.0.0.1"
-                },
-                {
-                    "name": "WEBMEET_TURN_CREDENTIAL_TTL_SECONDS",
-                    "required": false,
-                    "default": "29100"
-                }
-            ]
-        },
-        "dev": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "openPorts": [],
-            "env": [
-                {
-                    "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
-                    "required": false,
-                    "default": "warn"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
-                    "required": false,
-                    "default": "false"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
-                    "required": false,
-                    "default": "ws://127.0.0.1:7880"
-                },
-                {
-                    "name": "WEBMEET_TURN_AUTH_SECRET",
-                    "required": false,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_TURN_HOST",
-                    "required": false,
-                    "default": "127.0.0.1"
-                },
-                {
-                    "name": "WEBMEET_TURN_CREDENTIAL_TTL_SECONDS",
-                    "required": false,
-                    "default": "29100"
-                }
-            ]
-        },
-        "prod": {
-            "preinstall": "scripts/hooks/preinstall.sh",
-            "openPorts": [
-                "0.0.0.0:7881:7881",
-                "0.0.0.0:7882-7892:7882-7892/udp"
-            ],
-            "env": [
-                {
-                    "name": "WEBMEET_LIVEKIT_API_KEY",
-                    "required": true,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_API_SECRET",
-                    "required": true,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_NODE_IP",
-                    "required": false
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_LOG_LEVEL",
-                    "required": false,
-                    "default": "warn"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_FORCE_TCP",
-                    "required": false,
-                    "default": "false"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_EGRESS_REDIS_ADDRESS",
-                    "required": false,
-                    "default": "127.0.0.1:6379"
-                },
-                {
-                    "name": "WEBMEET_LIVEKIT_INTERNAL_WS_URL",
-                    "required": false,
-                    "default": "ws://127.0.0.1:7880"
-                },
-                {
-                    "name": "WEBMEET_TURN_AUTH_SECRET",
-                    "required": true,
-                    "sharedGeneratedSecret": true,
-                    "runtime": false
-                },
-                {
-                    "name": "WEBMEET_TURN_HOST",
-                    "required": false
-                },
-                {
-                    "name": "WEBMEET_TURN_CREDENTIAL_TTL_SECONDS",
-                    "required": false,
-                    "default": "29100"
-                }
-            ]
-        }
+  "container": "docker.io/assistos/livekit-server-agent@sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8",
+  "about": "WebMeet LiveKit signaling, single-port UDP media, Redis, and Egress runtime.",
+  "start": "sh /code/scripts/start-livekit-server-agent.sh",
+  "health": {
+    "readiness": {
+      "script": "healthcheck.sh",
+      "interval": 5,
+      "timeout": 10,
+      "failureThreshold": 60,
+      "successThreshold": 1
     }
+  },
+  "network": {
+    "mode": "host"
+  },
+  "containerSecurity": {
+    "privileged": false
+  },
+  "volumes": {
+    ".data/liveKitServerAgent/generated": "/working-data/generated",
+    ".ploinky/data/webmeet/redis": "/data/redis",
+    ".ploinky/data/webmeet/recordings": "/data/recordings"
+  },
+  "volumeOptions": {
+    "/working-data/generated": {
+      "generated": true,
+      "required": true
+    }
+  },
+  "httpServices": [
+    {
+      "slug": "livekit-signal",
+      "port": 7880,
+      "externalPrefix": "/public-services/livekit-signal/",
+      "internalPrefix": "/",
+      "access": "public"
+    },
+    {
+      "slug": "livekit-api",
+      "port": 7880,
+      "externalPrefix": "/services/livekit-api/",
+      "internalPrefix": "/twirp/livekit.RoomService/",
+      "access": "authenticated"
+    }
+  ],
+  "profiles": {
+    "default": {
+      "preinstall": "scripts/hooks/preinstall.sh",
+      "env": [
+        {
+          "name": "LIVEKIT_API_KEY",
+          "required": true,
+          "sharedGeneratedSecret": true
+        },
+        {
+          "name": "LIVEKIT_API_SECRET",
+          "required": true,
+          "sharedGeneratedSecret": true
+        }
+      ]
+    },
+    "dev": {
+      "preinstall": "scripts/hooks/preinstall.sh",
+      "env": [
+        {
+          "name": "LIVEKIT_API_KEY",
+          "required": true,
+          "sharedGeneratedSecret": true
+        },
+        {
+          "name": "LIVEKIT_API_SECRET",
+          "required": true,
+          "sharedGeneratedSecret": true
+        }
+      ]
+    },
+    "prod": {
+      "preinstall": "scripts/hooks/preinstall.sh",
+      "env": [
+        {
+          "name": "LIVEKIT_API_KEY",
+          "required": true,
+          "sharedGeneratedSecret": true
+        },
+        {
+          "name": "LIVEKIT_API_SECRET",
+          "required": true,
+          "sharedGeneratedSecret": true
+        }
+      ]
+    }
+  }
 }

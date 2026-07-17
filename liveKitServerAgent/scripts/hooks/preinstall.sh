@@ -1,289 +1,119 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-umask 077
-
 workspace_root="${PLOINKY_WORKSPACE_ROOT:?PLOINKY_WORKSPACE_ROOT is required}"
-profile="${PLOINKY_PROFILE:-default}"
-agent_dir="${workspace_root}/.data/liveKitServerAgent/generated"
-data_dir="${workspace_root}/.ploinky/data/webmeet"
+topology_file="${PLOINKY_EDGE_TOPOLOGY_FILE:?PLOINKY_EDGE_TOPOLOGY_FILE is required}"
+agent_lib_dir="${PLOINKY_AGENT_LIB_DIR:-/Agent}"
+generated_dir="${workspace_root}/.data/liveKitServerAgent/generated"
 
-fail() {
-    printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
-    exit 1
+mkdir -p \
+  "$generated_dir" \
+  "${workspace_root}/.ploinky/data/webmeet/redis" \
+  "${workspace_root}/.ploinky/data/webmeet/recordings"
+
+LIVEKIT_CONFIG_PATH="${generated_dir}/livekit.yaml" \
+EGRESS_CONFIG_PATH="${generated_dir}/egress.yaml" \
+REDIS_CONFIG_PATH="${generated_dir}/redis.conf" \
+LIVEKIT_API_KEY="${LIVEKIT_API_KEY:?LIVEKIT_API_KEY is required}" \
+LIVEKIT_API_SECRET="${LIVEKIT_API_SECRET:?LIVEKIT_API_SECRET is required}" \
+PLOINKY_EDGE_TOPOLOGY_FILE="$topology_file" \
+PLOINKY_AGENT_LIB_DIR="$agent_lib_dir" \
+node --input-type=module <<'NODE'
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const moduleUrl = pathToFileURL(path.join(process.env.PLOINKY_AGENT_LIB_DIR, 'lib', 'edgeTopology.mjs')).href;
+const { readEdgeTopology } = await import(moduleUrl);
+const topology = readEdgeTopology({ file: process.env.PLOINKY_EDGE_TOPOLOGY_FILE });
+const media = topology?.media;
+
+function parseLiteralIpv4(value) {
+  if (typeof value !== 'string' || !/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) return null;
+  const sourceOctets = value.split('.');
+  const octets = sourceOctets.map(Number);
+  if (octets.some((octet, index) => octet > 255 || String(octet) !== sourceOctets[index])) return null;
+  return octets.reduce((result, octet) => (result * 256) + octet, 0) >>> 0;
 }
 
-ensure_confined_directory() {
-    local root="$1" target="$2" label="$3" relative current part old_ifs root_real target_real
-    case "$target" in
-        "$root"/*)
-            relative="${target#"$root"/}"
-            ;;
-        *)
-            fail "$label must remain below PLOINKY_WORKSPACE_ROOT."
-            ;;
-    esac
-    current="$root"
-    if [ -L "$current" ]; then
-        fail "$label cannot use a symlinked workspace root."
-    fi
-    old_ifs="$IFS"
-    IFS='/'
-    # shellcheck disable=SC2086
-    set -- $relative
-    IFS="$old_ifs"
-    for part in "$@"; do
-        current="${current}/${part}"
-        if [ -L "$current" ]; then
-            fail "$label cannot contain symlinked path components ('$current')."
-        fi
-    done
-    mkdir -p "$target"
-    root_real="$(cd "$root" && pwd -P)" || fail "could not resolve PLOINKY_WORKSPACE_ROOT."
-    target_real="$(cd "$target" && pwd -P)" || fail "could not resolve $label."
-    case "$target_real" in
-        "$root_real"/*)
-            ;;
-        *)
-            fail "$label resolved outside PLOINKY_WORKSPACE_ROOT."
-            ;;
-    esac
+const NON_GLOBAL_IPV4_CIDRS = [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.0.2.0', 24],
+  ['192.31.196.0', 24],
+  ['192.52.193.0', 24],
+  ['192.88.99.0', 24],
+  ['192.168.0.0', 16],
+  ['192.175.48.0', 24],
+  ['198.18.0.0', 15],
+  ['198.51.100.0', 24],
+  ['203.0.113.0', 24],
+  ['224.0.0.0', 4],
+  ['240.0.0.0', 4],
+].map(([base, prefix]) => [parseLiteralIpv4(base), prefix]);
+
+function isLiteralGlobalUnicastIpv4(value) {
+  const address = parseLiteralIpv4(value);
+  if (address === null) return false;
+  return !NON_GLOBAL_IPV4_CIDRS.some(([base, prefix]) => {
+    const mask = (0xffffffff << (32 - prefix)) >>> 0;
+    return ((address & mask) >>> 0) === ((base & mask) >>> 0);
+  });
 }
 
-ensure_confined_directory "$workspace_root" "$agent_dir" "LiveKit generated-config directory"
-ensure_confined_directory "$workspace_root" "$data_dir/redis" "Redis data directory"
-ensure_confined_directory "$workspace_root" "$data_dir/recordings" "Egress recording directory"
-
-is_valid_ipv4_strict() {
-    local ip="$1" old_ifs octet
-    old_ifs="$IFS"
-    IFS='.'
-    # shellcheck disable=SC2086
-    set -- $ip
-    IFS="$old_ifs"
-    [ "$#" -eq 4 ] || return 1
-    for octet in "$1" "$2" "$3" "$4"; do
-        case "$octet" in
-            0|[1-9]|[1-9][0-9]|[1-9][0-9][0-9])
-                ;;
-            *)
-                return 1
-                ;;
-        esac
-        [ "$octet" -le 255 ] || return 1
-    done
+if (topology?.schemaVersion !== 2) {
+  throw new Error('LiveKit requires edge topology schemaVersion 2');
+}
+if (!isLiteralGlobalUnicastIpv4(media?.publicIPv4)) {
+  throw new Error('LiveKit media.publicIPv4 must be a literal globally routable unicast IPv4 address');
+}
+if (media?.udpPort !== 7882) {
+  throw new Error('LiveKit media.udpPort must equal the box-owned port 7882');
+}
+if (!['direct', 'nat-forward'].includes(media?.addressMode)) {
+  throw new Error('LiveKit media.addressMode must be direct or nat-forward');
 }
 
-is_valid_unicast_ipv4() {
-    local ip="$1" first second old_ifs
-    is_valid_ipv4_strict "$ip" || return 1
-    old_ifs="$IFS"
-    IFS='.'
-    # shellcheck disable=SC2086
-    set -- $ip
-    IFS="$old_ifs"
-    first="$1"
-    second="$2"
-    [ "$first" -ne 0 ] || return 1
-    [ "$first" -ne 127 ] || return 1
-    [ "$first" -lt 224 ] || return 1
-    if [ "$first" -eq 169 ] && [ "$second" -eq 254 ]; then
-        return 1
-    fi
-}
+const apiKey = process.env.LIVEKIT_API_KEY;
+const apiSecret = process.env.LIVEKIT_API_SECRET;
+if (!apiKey || !apiSecret) throw new Error('LiveKit API key and secret are required');
 
-is_valid_dns_hostname() {
-    local value="$1"
-    [ "${#value}" -le 253 ] || return 1
-    printf '%s' "$value" \
-        | grep -Eq '^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
-}
+const livekitConfig = {
+  port: 7880,
+  bind_addresses: ['127.0.0.1'],
+  logging: { level: 'info' },
+  rtc: {
+    node_ip: media.publicIPv4,
+    tcp_port: 0,
+    udp_port: 7882,
+    use_external_ip: false,
+  },
+  turn: { enabled: false },
+  redis: { address: '127.0.0.1:6379' },
+  keys: { [apiKey]: apiSecret },
+};
+const egressConfig = {
+  api_key: apiKey,
+  api_secret: apiSecret,
+  ws_url: 'ws://127.0.0.1:7880',
+  insecure: true,
+  redis: { address: '127.0.0.1:6379' },
+  template_port: 7980,
+  health_port: 7981,
+};
 
-is_valid_public_dns_hostname() {
-    local value="$1" lower
-    is_valid_dns_hostname "$value" || return 1
-    case "$value" in
-        *.*)
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-    case "$value" in
-        *[!0-9.]* )
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-    lower="$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')"
-    case "$lower" in
-        localhost|*.localhost|*.local)
-            return 1
-            ;;
-    esac
-}
+fs.writeFileSync(process.env.LIVEKIT_CONFIG_PATH, `${JSON.stringify(livekitConfig, null, 2)}\n`, { mode: 0o600 });
+fs.writeFileSync(process.env.EGRESS_CONFIG_PATH, `${JSON.stringify(egressConfig, null, 2)}\n`, { mode: 0o600 });
+fs.writeFileSync(
+  process.env.REDIS_CONFIG_PATH,
+  'bind 127.0.0.1\nprotected-mode yes\nport 6379\ndir /data/redis\nsave 60 1\nloglevel warning\nappendonly no\n',
+  { mode: 0o600 },
+);
+NODE
 
-validate_generated_hex_secret() {
-    local name="$1" value="$2"
-    if [ "${#value}" -ne 64 ] || ! printf '%s' "$value" | grep -Eq '^[0-9a-f]{64}$'; then
-        fail "$name must be the 64-character lowercase hexadecimal value generated by Ploinky."
-    fi
-}
-
-validate_bounded_positive_int() {
-    local name="$1" value="$2" maximum="$3"
-    case "$value" in
-        ''|*[!0-9]*)
-            fail "$name must be a positive integer (got '$value')."
-            ;;
-    esac
-    if [ "${#value}" -gt "${#maximum}" ]; then
-        fail "$name must not exceed $maximum (got '$value')."
-    fi
-    if [ "$value" -le 0 ]; then
-        fail "$name must be greater than zero (got '$value')."
-    fi
-    if [ "$value" -gt "$maximum" ]; then
-        fail "$name must not exceed $maximum (got '$value')."
-    fi
-}
-
-api_key="${WEBMEET_LIVEKIT_API_KEY:?WEBMEET_LIVEKIT_API_KEY is required}"
-api_secret="${WEBMEET_LIVEKIT_API_SECRET:?WEBMEET_LIVEKIT_API_SECRET is required}"
-turn_secret="${WEBMEET_TURN_AUTH_SECRET:?WEBMEET_TURN_AUTH_SECRET is required}"
-turn_ttl="${WEBMEET_TURN_CREDENTIAL_TTL_SECONDS:-29100}"
-log_level="${WEBMEET_LIVEKIT_LOG_LEVEL:-warn}"
-force_tcp="${WEBMEET_LIVEKIT_FORCE_TCP:-false}"
-redis_address="${WEBMEET_LIVEKIT_REDIS_ADDRESS:-127.0.0.1:6379}"
-egress_ws_url="${WEBMEET_LIVEKIT_INTERNAL_WS_URL:-ws://127.0.0.1:7880}"
-egress_redis_address="${WEBMEET_EGRESS_REDIS_ADDRESS:-127.0.0.1:6379}"
-
-validate_generated_hex_secret WEBMEET_LIVEKIT_API_KEY "$api_key"
-validate_generated_hex_secret WEBMEET_LIVEKIT_API_SECRET "$api_secret"
-validate_generated_hex_secret WEBMEET_TURN_AUTH_SECRET "$turn_secret"
-validate_bounded_positive_int WEBMEET_TURN_CREDENTIAL_TTL_SECONDS "$turn_ttl" 86400
-case "$log_level" in
-    debug|info|warn|error)
-        ;;
-    *)
-        fail "WEBMEET_LIVEKIT_LOG_LEVEL must be debug, info, warn, or error."
-        ;;
-esac
-if [ "$log_level" = "debug" ] || [ "$log_level" = "info" ]; then
-    printf '[liveKitServerAgent] WARNING: %s logging can include SDP ICE credentials and candidate addresses; use only for explicit sensitive diagnostics.\n' "$log_level" >&2
-fi
-case "$force_tcp" in
-    true|false)
-        ;;
-    *)
-        fail "WEBMEET_LIVEKIT_FORCE_TCP must be true or false."
-        ;;
-esac
-
-signal_port=7880
-rtc_tcp_port=7881
-rtc_port_range_start=7882
-rtc_port_range_end=7892
-node_ip=""
-
-case "$profile" in
-    default|dev)
-        turn_host="${WEBMEET_TURN_HOST:-127.0.0.1}"
-        node_ip="__WEBMEET_LOCAL_NODE_IP__"
-        if ! is_valid_ipv4_strict "$turn_host" && ! is_valid_dns_hostname "$turn_host"; then
-            fail "WEBMEET_TURN_HOST must be an IPv4 address or DNS hostname; got '$turn_host'."
-        fi
-        ;;
-    prod)
-        turn_host="${WEBMEET_TURN_HOST:?WEBMEET_TURN_HOST is required in the prod profile}"
-        node_ip="${WEBMEET_LIVEKIT_NODE_IP:?WEBMEET_LIVEKIT_NODE_IP is required in the prod profile}"
-        if ! is_valid_public_dns_hostname "$turn_host"; then
-            fail "WEBMEET_TURN_HOST must be a public multi-label DNS hostname (not an IP literal, localhost, or .local name); got '$turn_host'."
-        fi
-        if ! is_valid_unicast_ipv4 "$node_ip"; then
-            fail "WEBMEET_LIVEKIT_NODE_IP must be a unicast IPv4 address (not unspecified, loopback, link-local, or multicast); got '$node_ip'."
-        fi
-        ;;
-    *)
-        fail "unknown PLOINKY_PROFILE '$profile'."
-        ;;
-esac
-
-livekit_tmp=""
-egress_tmp=""
-redis_tmp=""
-cleanup_temps() {
-    rm -f "${livekit_tmp:-}" "${egress_tmp:-}" "${redis_tmp:-}"
-}
-trap cleanup_temps EXIT
-livekit_tmp="$(mktemp "${agent_dir}/.livekit.yaml.XXXXXX")" || fail "could not create a private LiveKit config file."
-egress_tmp="$(mktemp "${agent_dir}/.egress.yaml.XXXXXX")" || fail "could not create a private Egress config file."
-redis_tmp="$(mktemp "${agent_dir}/.redis.conf.XXXXXX")" || fail "could not create a private Redis config file."
-
-{
-    printf 'port: %s\n' "$signal_port"
-    printf 'logging:\n  level: %s\n' "$log_level"
-    printf 'rtc:\n'
-    printf '  tcp_port: %s\n' "$rtc_tcp_port"
-    printf '  port_range_start: %s\n' "$rtc_port_range_start"
-    printf '  port_range_end: %s\n' "$rtc_port_range_end"
-    printf '  use_external_ip: false\n'
-    printf '  force_tcp: %s\n' "$force_tcp"
-    printf '  node_ip: %s\n' "$node_ip"
-    printf '  turn_servers:\n'
-    printf '    - host: "%s"\n' "$turn_host"
-    printf '      port: 3478\n'
-    printf '      protocol: udp\n'
-    printf '      secret: "%s"\n' "$turn_secret"
-    printf '      ttl: %s\n' "$turn_ttl"
-    if [ "$profile" = "prod" ]; then
-        printf '    - host: "%s"\n' "$turn_host"
-        printf '      port: 443\n'
-        printf '      protocol: tls\n'
-        printf '      secret: "%s"\n' "$turn_secret"
-        printf '      ttl: %s\n' "$turn_ttl"
-    fi
-    printf 'redis:\n  address: %s\n' "$redis_address"
-    printf 'keys:\n  %s: %s\n' "$api_key" "$api_secret"
-} > "$livekit_tmp"
-
-{
-    printf 'api_key: %s\n' "$api_key"
-    printf 'api_secret: %s\n' "$api_secret"
-    printf 'ws_url: %s\n' "$egress_ws_url"
-    printf 'insecure: true\n'
-    printf 'redis:\n  address: %s\n' "$egress_redis_address"
-    printf 'health_port: 7980\n'
-} > "$egress_tmp"
-
-{
-    printf 'bind 127.0.0.1\n'
-    printf 'port 6379\n'
-    printf 'dir /data/redis\n'
-    printf 'save 60 1\n'
-    printf 'loglevel warning\n'
-    printf 'appendonly no\n'
-} > "$redis_tmp"
-
-chmod 0600 \
-    "$livekit_tmp" \
-    "$egress_tmp" \
-    "$redis_tmp"
-
-# Same-directory atomic renames replace pre-existing leaf symlinks without
-# following them. Reject directories so mv cannot reinterpret a target as a
-# destination directory and strand a secret-bearing temporary file inside it.
-for target in livekit.yaml egress.yaml redis.conf; do
-    if [ -d "${agent_dir}/${target}" ] && [ ! -L "${agent_dir}/${target}" ]; then
-        fail "generated config target '${agent_dir}/${target}' must not be a directory."
-    fi
-done
-rm -f "${agent_dir}/livekit.yaml" "${agent_dir}/egress.yaml" "${agent_dir}/redis.conf"
-mv "$livekit_tmp" "${agent_dir}/livekit.yaml"
-livekit_tmp=""
-mv "$egress_tmp" "${agent_dir}/egress.yaml"
-egress_tmp=""
-mv "$redis_tmp" "${agent_dir}/redis.conf"
-redis_tmp=""
-trap - EXIT
+printf '[liveKitServerAgent] generated fixed LiveKit/Egress/Redis configuration from topology generation (credentials redacted)\n'

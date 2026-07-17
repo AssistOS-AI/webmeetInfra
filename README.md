@@ -2,34 +2,24 @@
 
 Ploinky repository for the WebMeet media runtime.
 
-The runtime is delivered by two Ploinky agents:
+The runtime is delivered by one Ploinky agent:
 
-- `webmeetInfra/liveKitServerAgent` — supervises Redis, LiveKit Server, and
-  LiveKit Egress inside one container; see
+- `webmeetInfra/liveKitServerAgent` — see
   [`liveKitServerAgent/README.md`](liveKitServerAgent/README.md)
-- `webmeetInfra/turnServerAgent` — runs Coturn as a dedicated TURN/STUN relay
-  with shared-secret REST/ephemeral auth and a fail-closed peer ACL; see
-  [`turnServerAgent/README.md`](turnServerAgent/README.md)
 
-Neither agent runs Nginx or Certbot. The WebMeet signaling edge (TLS
-termination, reverse proxying) lives in `basic/web-publishing`, a different
-repository.
+That agent runs a pinned multi-architecture image and supervises Redis,
+LiveKit Server, LiveKit Egress, and private health. LiveKit signaling and Twirp
+bind to loopback TCP `7880`; public signaling and private administrative calls
+reach it only through the corresponding RoutingServer services. LiveKit owns
+the box's single UDP mux on `7882`. Egress template `7980` and semantic health
+`7981` are loopback-only and owner-checked. The runtime deliberately rejects
+the upstream wildcard-health binary; release activation requires the published
+multi-architecture digest from the commit-pinned loopback patch build.
 
-The `liveKitServerAgent` image is published to Docker Hub at
-`assistos/livekit-server-agent:webmeet-infra` through the manual
-`publish-livekit-server-agent.yml` workflow in
-`AssistOS-AI/container-image-builds`. That workflow checks out this repository
-as the build context, uses the centralized Dockerfile from
-`container-image-builds/images/livekit-server-agent/Dockerfile`, and publishes
-`linux/amd64` and `linux/arm64` variants under the same tag. It also exposes and
-validates the pushed manifest digest, then reports the immutable image reference
-in the workflow log and summary. The consumer manifest is pinned separately to
-`sha256:e8aee1f63763a3dcb427f47d3e0aab78b7932a8c1d6140fce43f7bde960b47f8`.
-Authentication
-uses the `DOCKERHUB_TOKEN` GitHub Actions secret in
-`AssistOS-AI/container-image-builds`; never commit token values to any repo.
-`turnServerAgent` pulls the upstream `docker.io/coturn/coturn` image directly,
-pinned by digest; it has no custom build or publishing workflow.
+TURN is external. Ploinky brokers short-lived relay credentials to authorized
+current-generation consumers. This repository contains no relay daemon,
+public TLS proxy, certificate process, tunnel connector, DNS automation, or
+physical-host publication configuration.
 
-The app-facing WebMeet agent remains in `AchillesIDE`; this repository only
-owns the runtime services.
+The app-facing WebMeet agent remains in `AchillesIDE`; this repository owns
+only the runtime services and their generated private configuration.
