@@ -19,8 +19,11 @@ container.
 
 ### Image and publishing
 
-The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
-directly. This tag is the default runtime image for every profile.
+The manifest pins the bridge-compatible multi-architecture index
+`docker.io/assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9`,
+originally published as `webmeet-infra-331fbd1`. Every profile uses that exact
+index. The mutable `webmeet-infra` tag is forbidden because it can move to an
+image built for a different supervisor contract.
 
 The image is built and published by the manual GitHub Actions workflow
 `publish-livekit-server-agent.yml` in `AssistOS-AI/container-image-builds`.
@@ -29,7 +32,7 @@ build context and uses
 `container-image-builds/images/livekit-server-agent/Dockerfile` as the
 centralized Dockerfile. Docker Hub authentication uses the `DOCKERHUB_TOKEN`
 secret in `AssistOS-AI/container-image-builds`. The workflow publishes the raw
-`webmeet-infra` tag and an sha-prefixed `webmeet-infra-<sha>` tag through
+`webmeet-infra` tag and a source-qualified `webmeet-infra-<sha>` tag through
 `docker/setup-buildx-action`, `docker/metadata-action`, and
 `docker/build-push-action` with `provenance: false`. The workflow publishes a
 multi-architecture image for `linux/amd64` and `linux/arm64` so Apple
