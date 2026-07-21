@@ -53,10 +53,10 @@ order, blocking on TCP readiness between steps:
 3. LiveKit Server (`livekit-server`) using the generated
    `/working-data/generated/livekit.yaml`, listening on the profile-appropriate
    signaling port (`7880` for default/prod, `17880` for dev). Default and dev
-   profiles detect the workstation IPv4 address unless
-   `WEBMEET_LOCAL_PUBLIC_HOST` or `WEBMEET_LIVEKIT_NODE_IP` is set, so browser
-   ICE candidates point at host-published media ports instead of the
-   bridge-container address.
+   profiles may detect the workstation IPv4 address unless
+   `WEBMEET_LOCAL_PUBLIC_HOST` or `WEBMEET_LIVEKIT_NODE_IP` is set. Those
+   profiles do not publish media ports from the manifest; media-enabled local
+   testing requires an explicitly managed UDP plane outside this manifest.
 4. LiveKit Egress (`egress`) using `EGRESS_CONFIG_FILE` pointing at the
    generated `/working-data/generated/egress.yaml`, then waits for the
    configured Egress health port.
@@ -65,9 +65,8 @@ order, blocking on TCP readiness between steps:
    `/working-data/generated/livekit.conf`) and a Certbot renewal loop gated by
    `WEBMEET_CERTBOT_AUTO_ISSUE`. Nginx waits for the TLS certificate to appear
    before binding ports.
-6. A small health endpoint bound to `0.0.0.0:${WEBMEET_INFRA_HEALTH_PORT}`
-   (default `17000`), used as the first published port and therefore as the
-   target of Ploinky's `readiness.protocol: "tcp"` probe.
+6. A small in-container health endpoint on `WEBMEET_INFRA_HEALTH_PORT`
+   (default `17000`) for diagnostics. The manifest does not publish it.
 
 The supervisor traps `INT`/`TERM`, stops children cleanly, and exits non-zero
 if any required service (`redis-server`, `turnserver`, `livekit-server`,
@@ -76,9 +75,12 @@ if any required service (`redis-server`, `turnserver`, `livekit-server`,
 ### Manifest invariants
 
 - `agent`: `sh /code/scripts/start-livekit-server-agent.sh`.
-- `readiness.protocol`: `"tcp"`.
-- The health port is first in every profile's `ports` list so the readiness
-  gate probes the supervisor, not the LiveKit signaling port.
+- This is a custom-command agent, so Ploinky does not assign it a primary
+  service. Consumers enable it with `no-wait`; readiness is verified by
+  service-specific smoke checks rather than a published host port.
+- No profile declares `openPorts`, legacy `ports`, or an additional-server
+  host port. Authenticated browser signaling uses
+  `/base-agent-additional-server/liveKitServerAgent/<signaling-port>/...`.
 - Generated config is mounted as a single directory from
   `.data/liveKitServerAgent/generated/` into `/working-data/generated`; durable
   state is mounted from
@@ -90,12 +92,9 @@ if any required service (`redis-server`, `turnserver`, `livekit-server`,
 - Default and dev profiles use the bridge network `webmeet` with the alias
   `liveKitServerAgent`. Consumers reach LiveKit at `liveKitServerAgent:7880`
   (or `:17880` in dev) and Egress at `liveKitServerAgent:7980`. Browser-facing
-  LiveKit signaling, media, and TURN ports are intentionally published on
-  `0.0.0.0` for these local profiles while Redis, Egress health, and the
-  supervisor health port remain loopback-only. The SFU and Coturn advertise the
-  detected workstation IPv4 address so Firefox on macOS/Podman can form usable
-  ICE pairs; loopback-only candidates are not reliable in that browser/runtime
-  combination.
+  Signaling is reached through Ploinky's in-container reverse relay. These
+  profiles do not publish signaling, media, TURN, Egress, Redis, or health
+  ports from the manifest.
 - The `prod` profile uses `network.mode: "host"` to preserve LiveKit's UDP
   WebRTC path and to give Nginx direct ownership of ports 80/443. Sibling
   bridge consumers reach the runtime through `host.containers.internal` in prod.
@@ -114,11 +113,11 @@ agent that the consumer's manifest enables.
 
 ### Profile-specific networking and consumer URLs
 
-| Profile  | Network         | Health port (host) | LiveKit signaling | Consumer URL pattern                       |
-|----------|-----------------|--------------------|-------------------|--------------------------------------------|
-| default  | bridge `webmeet`| 127.0.0.1:17000    | 0.0.0.0:7880      | `http://liveKitServerAgent:7880`, `:7980`  |
-| dev      | bridge `webmeet`| 127.0.0.1:17000    | 0.0.0.0:17880     | `http://liveKitServerAgent:17880`, `:7980` |
-| prod     | host networking | 127.0.0.1:17000    | 0.0.0.0:7880      | `http://host.containers.internal:7880`/`:7980` |
+| Profile  | Network         | Browser signaling locator | Server consumer URL pattern                       |
+|----------|-----------------|---------------------------|---------------------------------------------------|
+| default  | bridge `webmeet`| `liveKitServerAgent:7880` | `http://liveKitServerAgent:7880`, `:7980`         |
+| dev      | bridge `webmeet`| `liveKitServerAgent:17880`| `http://liveKitServerAgent:17880`, `:7980`        |
+| prod     | host networking | `liveKitServerAgent:7880` | `http://host.containers.internal:7880`/`:7980`    |
 
 Default and dev LiveKit generated config includes `rtc.node_ip` set to the
 detected workstation IPv4 address unless `WEBMEET_LIVEKIT_NODE_IP` is
@@ -136,9 +135,10 @@ rooms, invite tokens, participant membership, chat, transcripts, artifacts, AI
 dispatch metadata, recording commands, and LiveKit participant JWT issuance.
 The shared boundary is intentionally narrow:
 
-- Browsers connect to LiveKit through `WEBMEET_PUBLIC_LIVEKIT_URL`, which is
-  seeded to `ws://<detected-local-ip>:<signaling-port>` in default/dev
-  profiles and the production `wss://` signaling hostname in prod.
+- Browsers receive a route-key/container-port locator from `webmeetAgent`,
+  resolve it with Ploinky's authenticated locator endpoint, and connect through
+  the same-origin reverse-proxy WebSocket route. They do not receive a private
+  LiveKit URL.
 - `webmeetAgent` calls LiveKit RoomService, AgentDispatchService, and Egress
   Twirp APIs through `WEBMEET_LIVEKIT_URL`, using
   `http://liveKitServerAgent:7880` in default,
@@ -175,21 +175,19 @@ LiveKit's bridge-mode UDP path rewrites the SFU's server-initiated SRTP
 downlink source address to a bridge-local IP, which causes receivers to drop
 the downlink. Host networking puts LiveKit directly in the host's network
 namespace so it observes real client addresses on its server-initiated send
-path. Host networking also lets Nginx bind 80/443 directly without giving the
-container `CAP_NET_BIND` on a bridge. The default and dev profiles continue
-to use bridge networking for workstation use, but they publish only the
-browser-facing LiveKit/TURN ports beyond loopback and advertise the detected
-workstation IPv4 address so browsers do not have to reach bridge-container
-addresses directly.
+path. The default and dev profiles continue to use bridge networking for
+workstation control-plane testing and do not declare host port publication.
+Production signaling still enters through the Ploinky reverse relay; host
+networking is retained for the separately reviewed direct media plane.
 
-### Question #3: Why is the readiness probe `tcp` instead of `mcp`?
+### Question #3: Why do consumers enable this agent with `no-wait`?
 
 Response:
-This agent does not expose an MCP server. Its primary surface is a TCP health
-endpoint at `WEBMEET_INFRA_HEALTH_PORT`. Selecting `readiness.protocol: "tcp"`
-makes the Ploinky probe stop as soon as the supervisor accepts a TCP
-connection, which only happens after Redis, Coturn, LiveKit, and Egress have
-been started in order.
+This agent uses a custom supervisor command and therefore has no primary
+Ploinky service. Its health endpoint is container-confined, so the generic
+primary readiness gate cannot probe it. `no-wait` lets dependency startup
+continue; routed signaling and the in-container health script provide the
+targeted operational checks.
 
 ## Conclusion
 

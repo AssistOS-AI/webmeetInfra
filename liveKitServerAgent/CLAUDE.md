@@ -32,11 +32,12 @@ Single Ploinky agent that supervises the whole WebMeet runtime stack
 
 ## Runtime Defaults
 
-The manifest sets `agent: "sh /code/scripts/start-livekit-server-agent.sh"` and
-`readiness.protocol: "tcp"`. Ploinky probes the first published port,
-`127.0.0.1:17000` (the supervisor's health listener), so the readiness gate
-only passes after the supervisor has started Redis, Coturn, LiveKit Server,
-and Egress in order.
+The manifest sets `agent: "sh /code/scripts/start-livekit-server-agent.sh"`.
+Custom-command agents have no Ploinky primary service, so consumers enable this
+agent with `no-wait`. The health listener remains an in-container diagnostic;
+no profile publishes it or any LiveKit signaling port. Browser signaling uses
+Ploinky's authenticated additional-server route for `liveKitServerAgent` and
+the profile's container signaling port.
 
 The supervisor must not try to launch sibling Ploinky agents: Ploinky resolves
 manifest `enable` edges before this agent's container exists, and an in-process
@@ -68,4 +69,4 @@ Run the narrowest relevant check after edits, then broaden when touching shared 
 - `find .. -name '*.json' -not -path '*/.git/*' -print0 | xargs -0 -n1 python3 -m json.tool >/dev/null`
 - `ploinky start AchillesIDE/webmeetAgent`
 - `ploinky status`
-- `curl -fsS http://127.0.0.1:17000/`
+- Verify `/base-agent-additional-server/liveKitServerAgent/7880/` through an authenticated Ploinky router.

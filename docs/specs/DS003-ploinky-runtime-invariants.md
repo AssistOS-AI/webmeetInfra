@@ -16,7 +16,7 @@ The authoritative upstream contracts are Ploinky `docs/specs/DS005-routing-and-w
 
 ## Core Content
 
-`webmeetInfra` must treat the Ploinky router as the browser and MCP trust broker. Browser surfaces, first-party MCP calls, delegated MCP calls, uploads, blobs, and manifest-declared HTTP services are expected to enter through the router so route authentication, session handling, invocation minting, and audit behavior can apply. Direct agent ports are implementation details even when they are bound to localhost.
+`webmeetInfra` must treat the Ploinky router as the browser and MCP trust broker. Browser surfaces, first-party MCP calls, delegated MCP calls, uploads, blobs, and manifest-declared HTTP services are expected to enter through the router so route authentication, session handling, invocation minting, and audit behavior can apply. The LiveKit agent must not declare host-published TCP ports. Authenticated signaling uses `/base-agent-additional-server/liveKitServerAgent/<signaling-port>/...`; the router authenticates first and its in-container relay dials loopback.
 
 Executable MCP operations must be authorized by router-minted invocation JWTs. The agent runtime may receive `PLOINKY_DERIVED_MASTER_KEY`, which is the HKDF-derived agent runtime key, but it must never receive or require `PLOINKY_MASTER_KEY`. Code must not invent alternate bearer-token, client-secret, or caller-header authorization paths around the router's secure-wire model.
 
@@ -44,6 +44,8 @@ Agent-local contract:
 - Documentation: `docs/index.html`
 - Validation: `ploinky start AchillesIDE/webmeetAgent` plus `ploinky status` confirm the consolidated agent reports ready.
 - Supervisor scope: `scripts/start-livekit-server-agent.sh` may only manage processes installed inside this image. It must not invoke `ploinky` or otherwise try to start sibling agents, because Ploinky resolves `enable` edges before the container is created.
+- Startup: This custom-command agent has no primary Ploinky service. Explorer enables it with `no-wait`, and targeted diagnostics verify its internal health endpoint and routed signaling separately.
+- Media boundary: Production host networking is the designated direct UDP media plane. Browser HTTP and WebSocket signaling still enters through Ploinky's authenticated relay.
 
 ## Decisions & Questions
 
