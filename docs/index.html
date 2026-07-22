@@ -3,20 +3,15 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>webmeetInfra Documentation</title>
+    <title>webmeetInfra Runtime-v5 Documentation</title>
     <link rel="stylesheet" href="styles.css">
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
-    </script>
 </head>
 <body>
     <main>
-        <h1>webmeetInfra Documentation</h1>
-        <p>webmeetInfra is the Ploinky repository for the WebMeet media runtime. It ships a single agent, <code>liveKitServerAgent</code>, which supervises Redis, Coturn, LiveKit Server, LiveKit Egress, and (in the <code>prod</code> profile) Nginx + Certbot inside one container.</p>
-        <p>The manifest pins the bridge-compatible multi-architecture image index <code>docker.io/assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9</code>, originally published as <code>webmeet-infra-331fbd1</code>. The mutable <code>webmeet-infra</code> tag must not be used because it can move to a different supervisor contract. The image is published through the manual <code>publish-livekit-server-agent.yml</code> workflow in <code>AssistOS-AI/container-image-builds</code>, which checks out this repository as its build context, uses the centralized Dockerfile from <code>container-image-builds/images/livekit-server-agent/Dockerfile</code>, publishes <code>linux/amd64</code> and <code>linux/arm64</code> variants, includes Node 24 plus the Ploinky dependency-cache toolchain, and authenticates against Docker Hub using that repository's <code>DOCKERHUB_TOKEN</code> secret; the token value must never be stored in any repository.</p>
-        <p>Default and dev local profiles advertise the detected workstation IPv4 address as the LiveKit SFU ICE node address and publish browser-facing media/TURN ports on <code>0.0.0.0</code>. This keeps Firefox on macOS/Podman from getting trapped on loopback-only ICE candidates while Redis, Egress health, and the supervisor health port remain loopback-only.</p>
-        <p>The DS specifications are the source of truth for contracts, runtime assumptions, and Ploinky invariants. Start with <code>DS000-vision.md</code>, <code>DS001-coding-style.md</code>, and <code>DS002-livekit-server-agent.md</code> before changing the consolidated runtime.</p>
+        <h1>webmeetInfra Runtime-v5 Documentation</h1>
+        <p><code>liveKitServerAgent</code> runs a pinned multi-architecture image and supervises Redis, loopback LiveKit signaling/API, LiveKit Egress, and private health. LiveKit advertises the topology-configured literal globally routable unicast public IPv4 and owns the single box UDP mux on 7882.</p>
+        <p>Public signaling is routed through the public Router service. Twirp administration is routed only through the private Router listener with authenticated policy and an exact current-generation caller assertion. Egress template/service 7980 and health 7981 are distinct, loopback-only, owner-checked listeners with semantic probes. The upstream wildcard-health binary is rejected; activation requires the published multi-architecture digest of the commit-pinned loopback patch.</p>
+        <p>Relay service is external. Ploinky brokers short-lived relay credentials to exact authorized consumers; this repository contains no relay daemon, public TLS proxy, certificate process, or long-term relay secret.</p>
         <ul>
             <li><a href="specsLoader.html?spec=matrix.md">Specification matrix</a></li>
             <li><a href="specs/matrix.md">Raw specification matrix</a></li>

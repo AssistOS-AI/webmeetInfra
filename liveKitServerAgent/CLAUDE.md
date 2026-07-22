@@ -2,9 +2,9 @@
 
 ## Scope
 
-Single Ploinky agent that supervises the whole WebMeet runtime stack
-(Redis, Coturn, LiveKit Server, LiveKit Egress, plus Nginx and Certbot in the
-`prod` profile) inside one container.
+Single Ploinky agent that supervises Redis, LiveKit Server, LiveKit Egress, and
+private health inside a pinned image. It contains no local relay, public TLS
+proxy, certificate process, tunnel connector, or publication planner.
 
 ## Mandatory Reading Order
 
@@ -32,12 +32,18 @@ Single Ploinky agent that supervises the whole WebMeet runtime stack
 
 ## Runtime Defaults
 
-The manifest sets `agent: "sh /code/scripts/start-livekit-server-agent.sh"`.
-Custom-command agents have no Ploinky primary service, so consumers enable this
-agent with `no-wait`. The health listener remains an in-container diagnostic;
-no profile publishes it or any LiveKit signaling port. Browser signaling uses
-Ploinky's authenticated additional-server route for `liveKitServerAgent` and
-the profile's container signaling port.
+The manifest sets `agent: "sh /code/scripts/start-livekit-server-agent.sh"` and
+uses managed TCP readiness. The summary probe passes only after Redis, LiveKit
+Server, LiveKit Egress, Egress semantic health, and expected socket ownership
+are ready. Detailed health is served only on the unmounted Unix socket
+`/run/ploinky/livekit-supervisor.sock`.
+
+The preinstall hook consumes the immutable topology generation and generates
+LiveKit with loopback HTTP/Twirp on `7880`, a literal configured public IPv4,
+`use_external_ip: false`, one UDP mux on `7882`, and TCP media disabled. Public
+signaling and private Twirp use their declared Router services. External TURN
+credentials are brokered to authorized consumers; no long-term relay secret
+enters this agent.
 
 The supervisor must not try to launch sibling Ploinky agents: Ploinky resolves
 manifest `enable` edges before this agent's container exists, and an in-process
@@ -46,17 +52,16 @@ state. Every required service must therefore be installed in the image and
 supervised by the script directly.
 
 Generated config under `.data/liveKitServerAgent/generated/` is rebuilt every
-preinstall and must not contain secrets that leak outside the workspace. Durable
-state lives under `.ploinky/data/webmeet/` (Redis dump, recordings) and
-`.ploinky/data/webmeetTls/` (Let's Encrypt directory).
+preinstall and must not contain secrets that leak outside the workspace.
+Durable state lives under `.ploinky/data/webmeet/` (Redis data and recordings).
 
 ## Key Paths
 
 - `manifest.json`
-- `../../container-image-builds/images/livekit-server-agent/Dockerfile` — centralized image definition for this build context
 - `scripts/start-livekit-server-agent.sh`
 - `scripts/hooks/preinstall.sh`
 - `scripts/health/livekit-server-agent-health.sh`
+- `scripts/health/supervisor-health.mjs`
 - `../docs/specs/DS002-livekit-server-agent.md`
 - `../docs/specs/DS003-ploinky-runtime-invariants.md`
 
@@ -64,9 +69,10 @@ state lives under `.ploinky/data/webmeet/` (Redis dump, recordings) and
 
 Run the narrowest relevant check after edits, then broaden when touching shared behavior:
 
-- `bash -n scripts/start-livekit-server-agent.sh`
-- `bash -n scripts/hooks/preinstall.sh`
+- `sh -n scripts/start-livekit-server-agent.sh`
+- `sh -n scripts/hooks/preinstall.sh`
+- `sh -n scripts/health/livekit-server-agent-health.sh`
+- `node --check scripts/health/supervisor-health.mjs`
 - `find .. -name '*.json' -not -path '*/.git/*' -print0 | xargs -0 -n1 python3 -m json.tool >/dev/null`
 - `ploinky start AchillesIDE/webmeetAgent`
 - `ploinky status`
-- Verify `/base-agent-additional-server/liveKitServerAgent/7880/` through an authenticated Ploinky router.

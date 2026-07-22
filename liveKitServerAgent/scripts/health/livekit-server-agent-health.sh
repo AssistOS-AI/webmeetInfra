@@ -1,43 +1,41 @@
 #!/bin/sh
 set -eu
 
-# Smoke checks the liveKitServerAgent supervisor health endpoint and a few of
-# the supervised service ports. Intended for ad-hoc operator use and for the
-# Ploinky readiness probe fallback.
-
-HOST="${WEBMEET_INFRA_HEALTH_HOST:-127.0.0.1}"
-HEALTH_PORT="${WEBMEET_INFRA_HEALTH_PORT:-17000}"
-LIVEKIT_HOST="${WEBMEET_INFRA_LIVEKIT_HOST:-127.0.0.1}"
-LIVEKIT_PORT="${WEBMEET_INFRA_LIVEKIT_PORT:-7880}"
-REDIS_PORT="${WEBMEET_INFRA_REDIS_PORT:-6379}"
-
 fail() {
-    printf '[health] %s\n' "$1" >&2
-    exit 1
+  printf '[health] %s\n' "$1" >&2
+  exit 1
 }
 
-check_tcp() {
-    label="$1"
-    host="$2"
-    port="$3"
-    if command -v nc >/dev/null 2>&1; then
-        nc -z "$host" "$port" >/dev/null 2>&1 || fail "$label tcp $host:$port unreachable"
-    else
-        # Fallback: try /dev/tcp under bash; otherwise rely on curl.
-        ( exec 3<>/dev/tcp/"$host"/"$port" ) 2>/dev/null || \
-            curl -fsS --max-time 1 -o /dev/null "http://$host:$port" >/dev/null 2>&1 || \
-            fail "$label tcp $host:$port unreachable"
-    fi
-}
+curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:17000/ready \
+  || fail 'private supervisor readiness failed'
+[ "$(redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null)" = "PONG" ] \
+  || fail 'Redis semantic PING failed'
+curl -fsS --max-time 2 -o /dev/null http://127.0.0.1:7880/ \
+  || fail 'LiveKit signaling health failed'
+node /code/scripts/health/egress-semantic-health.mjs \
+  || fail 'Egress semantic health/template probes failed'
 
-if command -v curl >/dev/null 2>&1; then
-    curl -fsS --max-time 1 -o /dev/null "http://${HOST}:${HEALTH_PORT}/" \
-        || fail "health endpoint http://${HOST}:${HEALTH_PORT}/ failed"
-else
-    check_tcp "health" "$HOST" "$HEALTH_PORT"
+for port in 7980 7981; do
+  ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && /users:\(\("egress"/ && ($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  ' || fail "Egress TCP $port is not loopback-bound and owned by egress"
+  if ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && !($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "Egress TCP $port has a non-loopback listener"
+  fi
+done
+
+ss -H -lunp 2>/dev/null | awk '$4 ~ /:7882$/ && /livekit-server/ { found=1 } END { exit(found ? 0 : 1) }' \
+  || fail 'LiveKit does not own 7882/udp'
+
+if ss -H -lnt 2>/dev/null | awk '$4 ~ /:(80|443|3478|5349|7881)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+  fail 'forbidden TCP listener detected'
 fi
-
-check_tcp "redis" "$HOST" "$REDIS_PORT"
-check_tcp "livekit" "$LIVEKIT_HOST" "$LIVEKIT_PORT"
+if ss -H -lun 2>/dev/null | awk '$4 ~ /:(3478|5349|7883|7884|7885|7886|7887|7888|7889|7890|7891|7892)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+  fail 'forbidden UDP listener detected'
+fi
 
 printf 'ok\n'

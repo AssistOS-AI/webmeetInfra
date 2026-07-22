@@ -2,23 +2,24 @@
 
 Ploinky repository for the WebMeet media runtime.
 
-The runtime is delivered by one Ploinky agent that supervises Redis, Coturn,
-LiveKit Server, LiveKit Egress, and (in the `prod` profile) Nginx + Certbot
-inside a single container:
+The runtime is delivered by one Ploinky agent:
 
-- `webmeetInfra/liveKitServerAgent` — see [`liveKitServerAgent/README.md`](liveKitServerAgent/README.md)
+- `webmeetInfra/liveKitServerAgent` — see
+  [`liveKitServerAgent/README.md`](liveKitServerAgent/README.md)
 
-The manifest pins the bridge-compatible multi-architecture image index
-`docker.io/assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9`,
-originally published as `webmeet-infra-331fbd1`. It does not use the mutable
-`webmeet-infra` tag. Images are published through the manual
-`publish-livekit-server-agent.yml` workflow in
-`AssistOS-AI/container-image-builds`. That workflow checks out this repository
-as the build context, uses the centralized Dockerfile from
-`container-image-builds/images/livekit-server-agent/Dockerfile`, and publishes
-`linux/amd64` and `linux/arm64` variants under the same tag. Authentication
-uses the `DOCKERHUB_TOKEN` GitHub Actions secret in
-`AssistOS-AI/container-image-builds`; never commit token values to any repo.
+That agent runs a pinned multi-architecture image and supervises Redis,
+LiveKit Server, LiveKit Egress, and private health. LiveKit signaling and Twirp
+bind to loopback TCP `7880`; public signaling and private administrative calls
+reach it only through the corresponding RoutingServer services. LiveKit owns
+the box's single UDP mux on `7882`. Egress template `7980` and semantic health
+`7981` are loopback-only and owner-checked. The runtime deliberately rejects
+the upstream wildcard-health binary; release activation requires the published
+multi-architecture digest from the commit-pinned loopback patch build.
 
-The app-facing WebMeet agent remains in `AchillesIDE`; this repository only
-owns the runtime services.
+TURN is external. Ploinky brokers short-lived relay credentials to authorized
+current-generation consumers. This repository contains no relay daemon,
+public TLS proxy, certificate process, tunnel connector, DNS automation, or
+physical-host publication configuration.
+
+The app-facing WebMeet agent remains in `AchillesIDE`; this repository owns
+only the runtime services and their generated private configuration.

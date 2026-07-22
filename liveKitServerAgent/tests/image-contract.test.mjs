@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const agentRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const manifest = JSON.parse(fs.readFileSync(path.join(agentRoot, 'manifest.json'), 'utf8'));
+const startScript = path.join(agentRoot, 'scripts/start-livekit-server-agent.sh');
 
-test('manifest pins the bridge-compatible LiveKit image index', () => {
-    assert.equal(
-        manifest.container,
-        'docker.io/assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9'
-    );
-    assert.doesNotMatch(manifest.container, /:webmeet-infra$/);
+test('runtime without the v5 image marker fails before reading generated config or opening listeners', () => {
+  const result = spawnSync('sh', [startScript], {
+    cwd: agentRoot,
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /LiveKit Egress v5 image contract marker is missing/);
+  assert.match(result.stderr, /pin its verified index before activation/);
+  assert.doesNotMatch(result.stderr, /missing generated file/);
 });

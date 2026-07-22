@@ -3,9 +3,9 @@
 ## Scope
 
 webmeetInfra is a standalone Ploinky repo for the WebMeet media runtime. It
-ships a single agent, `liveKitServerAgent`, which supervises Redis, Coturn,
-LiveKit Server, LiveKit Egress, and (in the `prod` profile) Nginx + Certbot
-inside one container.
+ships a single agent, `liveKitServerAgent`, which supervises Redis, LiveKit
+Server, LiveKit Egress, and private health inside a pinned image. TURN is
+external; Router publication and Cloudflare/DNS state are box-owned.
 
 ## Mandatory Reading Order
 
@@ -35,11 +35,16 @@ inside one container.
 
 Infrastructure runs as a single Ploinky agent started by consumers
 (`webmeetAgent`, `webmeetLivekitAiAgent`). It owns media/runtime services only
-and must not implement application guest policy. The supervisor inside the
-container starts dependencies in order (Redis → Coturn → LiveKit Server →
-LiveKit Egress → optional Nginx/Certbot) and exposes a small TCP health
-endpoint on `WEBMEET_INFRA_HEALTH_PORT` (default 17000) as the readiness
-target.
+and must not implement application guest policy. The supervisor starts Redis,
+LiveKit Server, LiveKit Egress, and health in order. Detailed health is
+supervisor-only on `/run/ploinky/livekit-supervisor.sock`; the managed summary
+readiness listener exposes no administration surface.
+
+Generated configuration requires the immutable box-owned topology generation.
+LiveKit HTTP/Twirp binds loopback TCP `7880`; public signaling and private
+administration use their declared Router services. LiveKit alone owns UDP
+`7882`. Do not add local TURN, TLS termination, certificate automation, tunnel
+connectors, or manifest-driven physical publications.
 
 The supervisor must not try to launch sibling Ploinky agents. Manifest `enable`
 edges are resolved by Ploinky before the container exists; an in-container
@@ -49,18 +54,19 @@ process has no view of the host runtime and cannot spawn additional agents.
 
 - `docs/specs/matrix.md`
 - `liveKitServerAgent/manifest.json`
-- `../container-image-builds/images/livekit-server-agent/Dockerfile` — centralized image definition for the `liveKitServerAgent` build context
 - `liveKitServerAgent/scripts/start-livekit-server-agent.sh`
 - `liveKitServerAgent/scripts/hooks/preinstall.sh`
 - `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh`
-- `../container-image-builds/.github/workflows/publish-livekit-server-agent.yml` — centralized Docker Hub publish workflow
+- `liveKitServerAgent/scripts/health/supervisor-health.mjs`
 
 ## Validation
 
 Run the narrowest relevant check after edits, then broaden when touching shared behavior:
 
 - `find . -name '*.json' -not -path './.git/*' -print0 | xargs -0 -n1 python3 -m json.tool >/dev/null`
-- `bash -n liveKitServerAgent/scripts/start-livekit-server-agent.sh`
-- `bash -n liveKitServerAgent/scripts/hooks/preinstall.sh`
+- `sh -n liveKitServerAgent/scripts/start-livekit-server-agent.sh`
+- `sh -n liveKitServerAgent/scripts/hooks/preinstall.sh`
+- `sh -n liveKitServerAgent/scripts/health/livekit-server-agent-health.sh`
+- `node --check liveKitServerAgent/scripts/health/supervisor-health.mjs`
 - `ploinky start AchillesIDE/webmeetAgent`
 - `ploinky status`

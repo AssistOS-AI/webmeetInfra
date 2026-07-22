@@ -5,250 +5,167 @@ GENERATED_DIR="/working-data/generated"
 LIVEKIT_CONFIG="${GENERATED_DIR}/livekit.yaml"
 EGRESS_CONFIG="${GENERATED_DIR}/egress.yaml"
 REDIS_CONFIG="${GENERATED_DIR}/redis.conf"
-TURN_CONFIG="${GENERATED_DIR}/turnserver.conf"
-NGINX_CONFIG="${GENERATED_DIR}/nginx.conf"
-LIVEKIT_NGINX_CONFIG="${GENERATED_DIR}/livekit.conf"
-
-REDIS_DATA_DIR="${WEBMEET_REDIS_DATA_DIR:-/data/redis}"
-RECORDING_DIR="${WEBMEET_RECORDINGS_DIR:-/data/recordings}"
-HEALTH_PORT="${WEBMEET_INFRA_HEALTH_PORT:-17000}"
-HEALTH_INDEX_DIR="/tmp/webmeet-health"
-
-PROFILE="${PLOINKY_PROFILE:-default}"
-WAIT_FOR_TIMEOUT="${WEBMEET_INFRA_WAIT_TIMEOUT:-30}"
-
-mkdir -p "$REDIS_DATA_DIR" "$RECORDING_DIR" "$HEALTH_INDEX_DIR"
+SUPERVISOR_SOCKET="/run/ploinky/livekit-supervisor.sock"
+WAIT_FOR_TIMEOUT="${LIVEKIT_INFRA_WAIT_TIMEOUT:-45}"
+EGRESS_CONTRACT="/usr/local/share/ploinky/livekit-egress-loopback-v5.contract"
 
 PIDS=""
-EXIT_REASON=""
 
 log() {
-    printf '[liveKitServerAgent] %s\n' "$1"
+  printf '[liveKitServerAgent] %s\n' "$1"
 }
 
-err() {
-    printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
+fail() {
+  printf '[liveKitServerAgent] ERROR: %s\n' "$1" >&2
+  exit 1
 }
 
 require_file() {
-    if [ ! -f "$1" ]; then
-        err "missing generated file '$1'; ensure preinstall ran"
-        exit 1
-    fi
+  [ -s "$1" ] || fail "missing generated file '$1'; the topology-driven preinstall hook must succeed first"
 }
 
-require_file "$LIVEKIT_CONFIG"
-require_file "$EGRESS_CONFIG"
-require_file "$REDIS_CONFIG"
-require_file "$TURN_CONFIG"
+assert_egress_image_contract() {
+  if [ ! -f "$EGRESS_CONTRACT" ] || [ -L "$EGRESS_CONTRACT" ]; then
+    fail "LiveKit Egress v5 image contract marker is missing; publish the loopback-patched Egress image, rebuild the LiveKit image, and pin its verified index before activation"
+  fi
+  if [ "$(stat -c '%u:%g:%a' "$EGRESS_CONTRACT")" != '0:0:444' ]; then
+    fail "LiveKit Egress v5 image contract marker ownership or mode is invalid"
+  fi
+  if [ "$(sed -n '1p' "$EGRESS_CONTRACT")" != 'contract_version=5' ] \
+    || [ "$(sed -n '2p' "$EGRESS_CONTRACT")" != 'source_commit=ba52a026bea409bde31dcc7da9ba5322e967520c' ] \
+    || [ "$(sed -n '3p' "$EGRESS_CONTRACT")" != 'health_listener=127.0.0.1:7981' ] \
+    || [ "$(sed -n '4p' "$EGRESS_CONTRACT")" != 'template_listener=127.0.0.1:7980' ] \
+    || [ "$(wc -l < "$EGRESS_CONTRACT")" -ne 5 ]; then
+    fail "LiveKit Egress v5 image contract marker does not match the approved runtime contract"
+  fi
+  expected_egress_sha256="$(sed -n 's/^binary_sha256=//p' "$EGRESS_CONTRACT")"
+  case "$expected_egress_sha256" in
+    *[!0-9a-f]*|'') fail "LiveKit Egress v5 image contract contains an invalid binary digest" ;;
+  esac
+  if [ "${#expected_egress_sha256}" -ne 64 ]; then
+    fail "LiveKit Egress v5 image contract contains an invalid binary digest"
+  fi
+  if ! printf '%s  %s\n' "$expected_egress_sha256" /usr/bin/egress | sha256sum --check --strict - >/dev/null 2>&1; then
+    fail "LiveKit Egress binary digest does not match its v5 image contract"
+  fi
+}
 
 wait_for_tcp() {
-    label="$1"
-    host="$2"
-    port="$3"
-    deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
-    while [ "$(date +%s)" -lt "$deadline" ]; do
-        if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then
-            log "$label is ready on $host:$port"
-            return 0
-        fi
-        sleep 1
-    done
-    err "$label did not become ready on $host:$port within ${WAIT_FOR_TIMEOUT}s"
-    return 1
-}
-
-resolve_turn_external_ip() {
-    if [ "${WEBMEET_TURN_EXTERNAL_IP:-}" = "auto" ]; then
-        host="${WEBMEET_TURN_HOST:?WEBMEET_TURN_HOST is required when WEBMEET_TURN_EXTERNAL_IP=auto}"
-        resolved=""
-        if command -v getent >/dev/null 2>&1; then
-            resolved=$(getent ahostsv4 "$host" 2>/dev/null | awk '{print $1; exit}')
-        fi
-        if [ -z "$resolved" ] && command -v dig >/dev/null 2>&1; then
-            resolved=$(dig +short A "$host" 2>/dev/null | head -n 1)
-        fi
-        if [ -z "$resolved" ]; then
-            err "failed to resolve WEBMEET_TURN_HOST='$host'"
-            return 1
-        fi
-        export WEBMEET_TURN_RESOLVED_EXTERNAL_IP="$resolved"
-        log "resolved TURN external IP: $resolved"
+  label="$1"
+  host="$2"
+  port="$3"
+  deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if nc -z -w 1 "$host" "$port" >/dev/null 2>&1; then
+      log "$label is ready on $host:$port"
+      return 0
     fi
+    sleep 1
+  done
+  fail "$label did not become ready on $host:$port within ${WAIT_FOR_TIMEOUT}s"
 }
 
-write_turn_runtime_config() {
-    resolved="${WEBMEET_TURN_RESOLVED_EXTERNAL_IP:-${WEBMEET_TURN_EXTERNAL_IP:-127.0.0.1}}"
-    runtime_config="${GENERATED_DIR}/turnserver.runtime.conf"
-    awk -v ip="$resolved" '
-        /^external-ip=/ { print "external-ip=" ip; next }
-        { print }
-    ' "$TURN_CONFIG" > "$runtime_config"
-    echo "$runtime_config"
-}
-
-start_redis() {
-    log "starting redis"
-    redis-server "$REDIS_CONFIG" --dir "$REDIS_DATA_DIR" &
-    REDIS_PID=$!
-    PIDS="$PIDS $REDIS_PID"
-    wait_for_tcp "redis" 127.0.0.1 6379
-}
-
-start_coturn() {
-    log "starting coturn"
-    runtime_config=$(write_turn_runtime_config)
-    turnserver -c "$runtime_config" &
-    COTURN_PID=$!
-    PIDS="$PIDS $COTURN_PID"
-    turn_port=$(awk -F= '/^listening-port=/ {print $2; exit}' "$runtime_config")
-    [ -n "$turn_port" ] || turn_port=3478
-    wait_for_tcp "coturn" 127.0.0.1 "$turn_port"
-}
-
-start_livekit() {
-    log "starting livekit-server"
-    livekit-server --config "$LIVEKIT_CONFIG" &
-    LIVEKIT_PID=$!
-    PIDS="$PIDS $LIVEKIT_PID"
-    signal_port=$(awk '/^port:/ {print $2; exit}' "$LIVEKIT_CONFIG")
-    [ -n "$signal_port" ] || signal_port=7880
-    wait_for_tcp "livekit-server" 127.0.0.1 "$signal_port"
-}
-
-start_egress() {
-    log "starting livekit-egress"
-    EGRESS_CONFIG_FILE="$EGRESS_CONFIG" egress &
-    EGRESS_PID=$!
-    PIDS="$PIDS $EGRESS_PID"
-    egress_health_port=$(awk '/^[[:space:]]*health_port:/ {print $2; exit}' "$EGRESS_CONFIG")
-    [ -n "$egress_health_port" ] || egress_health_port=7980
-    wait_for_tcp "livekit-egress" 127.0.0.1 "$egress_health_port"
-}
-
-maybe_start_nginx() {
-    if [ "$PROFILE" != "prod" ]; then
-        return 0
+wait_for_udp_owner() {
+  deadline=$(( $(date +%s) + WAIT_FOR_TIMEOUT ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if ss -H -lunp 2>/dev/null | awk '$4 ~ /:7882$/ && /livekit-server/ { found=1 } END { exit(found ? 0 : 1) }'; then
+      log "livekit-server owns the fixed UDP mux on 0.0.0.0:7882"
+      return 0
     fi
-    if [ ! -f "$NGINX_CONFIG" ] || [ ! -f "$LIVEKIT_NGINX_CONFIG" ]; then
-        log "nginx config missing; skipping TLS terminator"
-        return 0
-    fi
-    hostname="${WEBMEET_TLS_HOSTNAME:-}"
-    if [ -z "$hostname" ]; then
-        err "prod profile requires WEBMEET_TLS_HOSTNAME for nginx"
-        return 1
-    fi
-    cert_path="/etc/letsencrypt/live/${hostname}/fullchain.pem"
-    if [ ! -f "$cert_path" ]; then
-        log "waiting for TLS certificate at $cert_path"
-        # In prod, certbot writes the cert below; we wait up to 5 minutes the
-        # first time, then start nginx asynchronously once it appears.
-        ( deadline=$(( $(date +%s) + 300 ))
-          while [ ! -f "$cert_path" ] && [ "$(date +%s)" -lt "$deadline" ]; do
-              sleep 5
-          done
-          if [ -f "$cert_path" ]; then
-              log "starting nginx after cert is present"
-              nginx -c "$NGINX_CONFIG" -g 'daemon off;' &
-          else
-              err "TLS certificate did not appear; nginx not started"
-          fi
-        ) &
-        return 0
-    fi
-    log "starting nginx"
-    nginx -c "$NGINX_CONFIG" -g 'daemon off;' &
-    NGINX_PID=$!
-    PIDS="$PIDS $NGINX_PID"
+    sleep 1
+  done
+  fail "livekit-server did not acquire the fixed UDP mux 7882/udp"
 }
 
-maybe_start_certbot_loop() {
-    if [ "$PROFILE" != "prod" ]; then
-        return 0
-    fi
-    auto_issue="${WEBMEET_CERTBOT_AUTO_ISSUE:-false}"
-    hostname="${WEBMEET_TLS_HOSTNAME:-}"
-    if [ -z "$hostname" ]; then
-        return 0
-    fi
-    email="${WEBMEET_CERT_EMAIL:-}"
-    interval="${WEBMEET_CERTBOT_RENEW_INTERVAL_SECONDS:-43200}"
-    webroot="/var/www/certbot"
-    live_dir="/etc/letsencrypt/live/${hostname}"
-    mkdir -p "$webroot"
-
-    if [ ! -d "$live_dir" ] && [ "$auto_issue" = "true" ]; then
-        if [ -z "$email" ]; then
-            err "WEBMEET_CERTBOT_AUTO_ISSUE=true requires WEBMEET_CERT_EMAIL"
-            return 1
-        fi
-        log "issuing initial cert via standalone HTTP-01"
-        certbot certonly --standalone \
-            -d "$hostname" \
-            --email "$email" \
-            --agree-tos --non-interactive --no-eff-email || \
-            err "initial certbot issuance failed"
-    fi
-
-    (
-        while true; do
-            if [ -d "$live_dir" ]; then
-                certbot renew --webroot --webroot-path "$webroot" --no-random-sleep-on-renew >/dev/null 2>&1 || true
-            fi
-            sleep "$interval"
-        done
-    ) &
-    CERTBOT_PID=$!
-    PIDS="$PIDS $CERTBOT_PID"
+assert_forbidden_listeners_absent() {
+  if ss -H -lnt 2>/dev/null | awk '$4 ~ /:(80|443|3478|5349|7881)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+    fail "a forbidden TCP listener (80, 443, 3478, 5349, or 7881) is active"
+  fi
+  if ss -H -lun 2>/dev/null | awk '$4 ~ /:(3478|5349|7883|7884|7885|7886|7887|7888|7889|7890|7891|7892)$/ { found=1 } END { exit(found ? 0 : 1) }'; then
+    fail "a forbidden local TURN or LiveKit UDP-range listener is active"
+  fi
 }
 
-start_health_listener() {
-    printf 'ok\n' > "${HEALTH_INDEX_DIR}/index.html"
-    log "starting health endpoint on 0.0.0.0:${HEALTH_PORT}"
-    ( cd "${HEALTH_INDEX_DIR}" && python3 -m http.server "${HEALTH_PORT}" --bind 0.0.0.0 >/dev/null 2>&1 ) &
-    HEALTH_PID=$!
-    PIDS="$PIDS $HEALTH_PID"
+assert_egress_listener() {
+  label="$1"
+  port="$2"
+  if ! ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && /users:\(\("egress"/ && ($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "$label must be owned by egress and bound only to loopback on TCP $port"
+  fi
+  if ss -H -lntp 2>/dev/null | awk -v port=":${port}$" '
+    $4 ~ port && !($4 ~ /^127\.0\.0\.1:/ || $4 ~ /^\[::1\]:/) { found=1 }
+    END { exit(found ? 0 : 1) }
+  '; then
+    fail "$label has a non-loopback TCP $port listener"
+  fi
 }
 
 shutdown_children() {
-    log "stopping supervised services"
-    for pid in $PIDS; do
-        [ -n "$pid" ] || continue
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-        fi
-    done
-    sleep 1
-    for pid in $PIDS; do
-        [ -n "$pid" ] || continue
-        if kill -0 "$pid" 2>/dev/null; then
-            kill -9 "$pid" 2>/dev/null || true
-        fi
-    done
+  log "stopping supervised services"
+  for pid in $PIDS; do
+    [ -n "$pid" ] || continue
+    kill "$pid" 2>/dev/null || true
+  done
+  sleep 1
+  for pid in $PIDS; do
+    [ -n "$pid" ] || continue
+    kill -9 "$pid" 2>/dev/null || true
+  done
 }
 
-trap 'EXIT_REASON=signal; shutdown_children; exit 0' INT TERM
+assert_egress_image_contract
+require_file "$LIVEKIT_CONFIG"
+require_file "$EGRESS_CONFIG"
+require_file "$REDIS_CONFIG"
+mkdir -p /data/redis /data/recordings /run/ploinky
+rm -f "$SUPERVISOR_SOCKET"
+
+trap 'shutdown_children; exit 0' INT TERM
 trap 'rc=$?; shutdown_children; exit $rc' EXIT
 
-resolve_turn_external_ip
-start_redis
-start_coturn
-start_livekit
-start_egress
-maybe_start_nginx
-maybe_start_certbot_loop
-start_health_listener
+log "starting loopback Redis"
+redis-server "$REDIS_CONFIG" --dir /data/redis &
+REDIS_PID=$!
+PIDS="$PIDS $REDIS_PID"
+wait_for_tcp redis 127.0.0.1 6379
 
-log "all required services started"
+log "starting loopback LiveKit signaling with one UDP mux"
+livekit-server --config "$LIVEKIT_CONFIG" &
+LIVEKIT_PID=$!
+PIDS="$PIDS $LIVEKIT_PID"
+wait_for_tcp livekit 127.0.0.1 7880
+wait_for_udp_owner
+assert_forbidden_listeners_absent
 
-# Watch supervised pids; exit nonzero if any required service dies.
+log "starting LiveKit Egress (template 7980, health 7981)"
+EGRESS_CONFIG_FILE="$EGRESS_CONFIG" egress &
+EGRESS_PID=$!
+PIDS="$PIDS $EGRESS_PID"
+wait_for_tcp egress-template 127.0.0.1 7980
+wait_for_tcp egress-health 127.0.0.1 7981
+assert_egress_listener egress-template 7980
+assert_egress_listener egress-health 7981
+node /code/scripts/health/egress-semantic-health.mjs
+
+log "starting private supervisor health endpoints"
+SUPERVISED_PIDS="$REDIS_PID,$LIVEKIT_PID,$EGRESS_PID" \
+SUPERVISOR_SOCKET="$SUPERVISOR_SOCKET" \
+node /code/scripts/health/supervisor-health.mjs &
+HEALTH_PID=$!
+PIDS="$PIDS $HEALTH_PID"
+wait_for_tcp supervisor-health 127.0.0.1 17000
+
+/code/scripts/health/livekit-server-agent-health.sh
+log "all required services are ready"
+
 while true; do
-    for pid in $REDIS_PID $COTURN_PID $LIVEKIT_PID $EGRESS_PID $HEALTH_PID; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            err "supervised service pid $pid exited; tearing down"
-            exit 1
-        fi
-    done
-    sleep 5
+  for pid in "$REDIS_PID" "$LIVEKIT_PID" "$EGRESS_PID" "$HEALTH_PID"; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      fail "supervised service pid $pid exited"
+    fi
+  done
+  sleep 5
 done

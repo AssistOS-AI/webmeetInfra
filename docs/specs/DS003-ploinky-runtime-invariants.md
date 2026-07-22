@@ -16,15 +16,31 @@ The authoritative upstream contracts are Ploinky `docs/specs/DS005-routing-and-w
 
 ## Core Content
 
-`webmeetInfra` must treat the Ploinky router as the browser and MCP trust broker. Browser surfaces, first-party MCP calls, delegated MCP calls, uploads, blobs, and manifest-declared HTTP services are expected to enter through the router so route authentication, session handling, invocation minting, and audit behavior can apply. The LiveKit agent must not declare host-published TCP ports. Authenticated signaling uses `/base-agent-additional-server/liveKitServerAgent/<signaling-port>/...`; the router authenticates first and its in-container relay dials loopback.
+`webmeetInfra` must treat the Ploinky routers as the trust boundary. Public
+LiveKit WebSocket signaling enters through the public Router listener; Twirp
+administration enters only through the private Router listener. Direct agent
+ports are implementation details even when they bind to loopback.
 
-Executable MCP operations must be authorized by router-minted invocation JWTs. The agent runtime may receive `PLOINKY_DERIVED_MASTER_KEY`, which is the HKDF-derived agent runtime key, but it must never receive or require `PLOINKY_MASTER_KEY`. Code must not invent alternate bearer-token, client-secret, or caller-header authorization paths around the router's secure-wire model.
+Executable MCP operations must be authorized by router-minted invocation JWTs. The
+agent runtime must never receive or require `PLOINKY_MASTER_KEY` or the removed
+`PLOINKY_DERIVED_MASTER_KEY`. Code must not invent alternate bearer-token,
+client-secret, or caller-header authorization paths around the router's
+secure-wire model.
 
-`PLOINKY_DERIVED_MASTER_KEY` is the mandatory root for Ploinky-owned and agent-owned generated secrets. Agent-owned generated secrets use `generatedSecret: true` for manifest env entries or `{{generatedSecret:NAME}}` for runtime-resource templates; both derive from the current agent identity and ignore operator-supplied values. Shared generated credentials that must be identical across agents use `sharedGeneratedSecret: true` and derive from the source env name. Agents must not invent random persistent agent secrets or require manual configuration for workspace-owned LiveKit, TURN, OnlyOffice, DPU, recording, webhook, or data-encryption secrets. External third-party credentials remain explicitly configured.
+Ploinky resolves declared generated secrets before agent code runs. The LiveKit
+runtime receives only the resolved API key and API secret that it needs to
+operate; it never receives a master derivation key. External TURN infrastructure
+is operator-configured. Its long-term credential stays in Ploinky core, which
+brokers short-lived credentials to exact current-instance/current-enable-
+generation consumers. The LiveKit image contains no Coturn, local relay range,
+public TLS terminator, Certbot state, or standalone publication controller.
 
-The compact `x-ploinky-auth-info` header is not a secure grant by itself. Any HTTP service that receives that header must trust it only when it arrived through a declared Ploinky HTTP service route and, for guest services, only after validating the router-issued invocation token and the expected guest role or scope. Caller-supplied copies of identity headers must be rejected as authoritative input.
-
-Guest access must remain scoped to the route shape declared by the owning manifest. Manifest-level `guest: true` exposes the agent as a normal guest agent and should still enforce limitations from `usr.roles`. An `httpServices` entry with `auth: "guest"` exposes only the declared HTTP prefix; `forceGuest: true` must ignore any existing workspace login and mint a service-scoped guest session. Product-specific public paths must be declared in the agent manifest rather than hard-coded in Ploinky core.
+The compact `x-ploinky-auth-info` header is not a secure grant by itself.
+Caller-supplied identity, forwarding, assertion, and invocation headers must be
+discarded at the Router trust boundary. Public LiveKit signaling follows the
+declared public service policy; private Twirp requires effective authenticated
+policy admission and the exact current-generation assertion in addition to
+LiveKit's own API authorization.
 
 Agent code must enforce its own domain authorization. Ploinky route authentication identifies the caller and signs the invocation, but it does not grant every domain operation. Sensitive actions must check the verified user, roles, scopes, target resource, workspace path, and agent-local policy before reading or mutating state.
 
@@ -39,13 +55,13 @@ Agent-local contract:
 - Manifest: `webmeetInfra/liveKitServerAgent/manifest.json`
 - Role: Single Ploinky agent that supervises the WebMeet media runtime.
 - Authentication: The agent runs as a dependency of `webmeetAgent` / `webmeetLivekitAiAgent` and must not expose application guest or admin policy by itself.
-- HTTP service surface: No infrastructure manifest declares public HTTP services; application-facing guest routes belong to `webmeetAgent`.
-- Persistent state: Generated LiveKit/Egress/Redis/Coturn/Nginx config and the in-container supervisor are runtime resources controlled by the manifest. Manifest volume host paths must stay under `.ploinky/`; durable recording data belongs under `.ploinky/data/webmeet/recordings`, durable Redis state under `.ploinky/data/webmeet/redis`, TLS state under `.ploinky/data/webmeetTls/...`, and generated config under `.data/liveKitServerAgent/generated/...`.
+- HTTP service surface: `livekit-signal` is the declared public WebSocket service and `livekit-api` is the authenticated private Twirp service. Neither service creates a physical-host publication. Private Twirp also requires an exact current-instance/current-enable-generation caller assertion.
+- Media sockets: LiveKit HTTP is process-local on `127.0.0.1:7880`; its only media socket is UDP `7882` with the literal configured globally routable unicast public IPv4, `use_external_ip: false`, TCP fallback disabled, and no UDP range. One exact generation-capability runtime may own the box UDP socket.
+- Egress sockets: the Egress template listener is `127.0.0.1:7980` and semantic health is `127.0.0.1:7981`; both are private and neither is an outer publication.
+- Persistent state: Generated LiveKit, Egress, and Redis config plus the in-container supervisor are runtime resources controlled by the manifest. Manifest volume host paths stay under `.ploinky/`; durable recordings belong under `.ploinky/data/webmeet/recordings`, durable Redis state under `.ploinky/data/webmeet/redis`, and generated config under `.data/liveKitServerAgent/generated/`. No local relay or TLS state exists.
 - Documentation: `docs/index.html`
-- Validation: `ploinky start AchillesIDE/webmeetAgent` plus `ploinky status` confirm the consolidated agent reports ready.
+- Validation: syntax/config checks precede a fresh runtime-v5 stack. Release verification requires two-account browser signaling through Router, native Linux direct UDP on amd64 and arm64, and external TURN/UDP and TURN/TLS fallback lanes.
 - Supervisor scope: `scripts/start-livekit-server-agent.sh` may only manage processes installed inside this image. It must not invoke `ploinky` or otherwise try to start sibling agents, because Ploinky resolves `enable` edges before the container is created.
-- Startup: This custom-command agent has no primary Ploinky service. Explorer enables it with `no-wait`, and targeted diagnostics verify its internal health endpoint and routed signaling separately.
-- Media boundary: Production host networking is the designated direct UDP media plane. Browser HTTP and WebSocket signaling still enters through Ploinky's authenticated relay.
 
 ## Decisions & Questions
 
@@ -59,6 +75,20 @@ Coding work often starts from an individual agent directory, where only local gu
 Response:
 Ploinky establishes who the caller is and signs the invocation path, but domain ownership remains inside the agent. The agent knows which files, records, rooms, leads, secrets, repositories, media objects, or infrastructure controls are safe for that caller. Each agent must therefore enforce its own resource policy after reading verified auth context.
 
+### Question #3: Why is TURN no longer supervised by this agent?
+
+Response:
+The v5 edge contract makes relay infrastructure an external operator-owned
+service. Keeping Coturn or relay ranges inside the LiveKit image would create an
+undeclared publication surface and duplicate long-lived credentials in a
+consumer. Ploinky instead retains the external TURN secret and mints bounded
+credentials only for exact authorized runtime generations.
+
 ## Conclusion
 
-`webmeetInfra` remains compatible with Ploinky only while it preserves router-mediated entry, secure-wire invocation, scoped guest behavior, explicit manifest-declared HTTP services, workspace-confined storage, redacted logging, and local domain authorization. Any source change that affects these contracts must update this specification, the local docs, and the local guide files in the same change set.
+`webmeetInfra` remains compatible with Ploinky only while it preserves
+router-mediated signaling and Twirp, exact-generation private admission,
+single-port UDP media, external TURN, explicit manifest-declared HTTP services,
+workspace-confined storage, and redacted logging. Any source change that affects
+these contracts must update this specification, the local docs, and the local
+guide files in the same change set.
