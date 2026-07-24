@@ -20,28 +20,21 @@ only manage processes that already exist inside this image.
 ## Image
 
 ```
-assistos/livekit-server-agent:webmeet-infra
+assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9
 ```
 
-The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
-directly as the default runtime image for every profile.
-
-The image is published through `publish-livekit-server-agent.yml` in
-`AssistOS-AI/container-image-builds` (manual `workflow_dispatch` only). That
-workflow checks out this repository as the build context, uses the centralized
-Dockerfile from `container-image-builds/images/livekit-server-agent/Dockerfile`,
-and publishes `linux/amd64` plus `linux/arm64` variants. It uses the
-`DOCKERHUB_TOKEN` secret in `AssistOS-AI/container-image-builds`; do not store
-the token in any repo.
+The manifest pulls this immutable multi-architecture digest for every profile.
+Docker Hub also exposes it as `webmeet-infra-331fbd1`. Its required binaries
+and bundled supervisor/health scripts have been verified against
+`webmeetInfra/main`. Do not replace the digest with the mutable
+`webmeet-infra` tag: that channel may target a different branch contract.
 
 ## Files
 
 - `manifest.json` — Ploinky manifest with `default`, `dev`, and `prod` profiles
-- centralized Dockerfile — final image based on `livekit/egress` plus
-  `livekit-server`, Node 24 from the shared Ploinky Node base, `redis-server`,
-  `coturn`, `nginx`, `certbot`, `tini`, `curl`, and Ploinky dependency-cache
-  tools (`git`, `make`, `g++`); source lives in
-  `AssistOS-AI/container-image-builds`
+- pinned runtime image — based on `livekit/egress` plus `livekit-server`, Node,
+  `redis-server`, `coturn`, `nginx`, `certbot`, `python3`, `tini`, `curl`, and
+  Ploinky dependency-cache tools (`git`, `make`, `g++`)
 - `scripts/start-livekit-server-agent.sh` — in-container supervisor
 - `scripts/hooks/preinstall.sh` — host-side generator for runtime config
 - `scripts/health/livekit-server-agent-health.sh` — operator smoke check
@@ -75,13 +68,6 @@ bash -n liveKitServerAgent/scripts/start-livekit-server-agent.sh
 bash -n liveKitServerAgent/scripts/hooks/preinstall.sh
 ```
 
-To build the image locally with Docker:
-
-```sh
-docker build \
-  -t assistos/livekit-server-agent:webmeet-infra \
-  -f ../container-image-builds/images/livekit-server-agent/Dockerfile \
-  liveKitServerAgent
-```
-
-Use Podman with the same arguments if Podman is the configured runtime.
+Before pinning a replacement image, verify both supported architectures, every
+required binary listed above, the supervisor and health-script checksums, and a
+full Ploinky startup using this repository's current `main` branch.
