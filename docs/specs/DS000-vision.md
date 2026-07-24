@@ -26,7 +26,7 @@ The active runtime is the consolidated `liveKitServerAgent`:
 | LiveKit Egress | Room composite recording and MP4 writes into the shared recording volume. |
 | Nginx and Certbot | Production-only TLS termination and certificate renewal for the LiveKit signaling hostname. |
 
-The runtime image is published to Docker Hub as `assistos/livekit-server-agent:webmeet-infra` through the manual `publish-livekit-server-agent.yml` GitHub Actions workflow in `AssistOS-AI/container-image-builds`. Publishing uses the `DOCKERHUB_TOKEN` secret from that repository; token values must never be committed or documented as plaintext.
+The runtime manifest pins the reviewed multi-architecture Docker Hub digest `assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9`, also published as `webmeet-infra-331fbd1`. The mutable `webmeet-infra` tag is not a deployment contract. Replacement images must include every supervised service, be validated against the current default branch, and be pinned by immutable digest before rollout.
 
 Generated runtime config belongs under `.data/liveKitServerAgent/generated/`. Durable infrastructure state belongs under `.ploinky/data/webmeet/...` and `.ploinky/data/webmeetTls/...`. Recording files written by Egress are shared file artifacts under `.ploinky/data/webmeet/recordings`; WebMeet recording metadata remains in the `webmeetAgent` encrypted meeting payload.
 

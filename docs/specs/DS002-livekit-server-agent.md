@@ -19,22 +19,25 @@ container.
 
 ### Image and publishing
 
-The manifest pulls `docker.io/assistos/livekit-server-agent:webmeet-infra`
-directly. This tag is the default runtime image for every profile.
+The manifest pulls
+`docker.io/assistos/livekit-server-agent@sha256:012bb28b82300a4e0b720decb6d3b023fc2f26c7a2665832bf1baaeb5b2bb6f9`
+for every profile. Docker Hub also exposes this image as
+`webmeet-infra-331fbd1`. The digest is a multi-architecture index containing
+native `linux/amd64` and `linux/arm64` images.
 
-The image is built and published by the manual GitHub Actions workflow
-`publish-livekit-server-agent.yml` in `AssistOS-AI/container-image-builds`.
-The workflow is `workflow_dispatch` only. It checks out this repository as the
-build context and uses
-`container-image-builds/images/livekit-server-agent/Dockerfile` as the
-centralized Dockerfile. Docker Hub authentication uses the `DOCKERHUB_TOKEN`
-secret in `AssistOS-AI/container-image-builds`. The workflow publishes the raw
-`webmeet-infra` tag and an sha-prefixed `webmeet-infra-<sha>` tag through
-`docker/setup-buildx-action`, `docker/metadata-action`, and
-`docker/build-push-action` with `provenance: false`. The workflow publishes a
-multi-architecture image for `linux/amd64` and `linux/arm64` so Apple
-Silicon/aarch64 Podman machines pull a native image instead of running Redis
-and the media stack through QEMU emulation.
+The image contains every service required by this branch. Its bundled
+`start-livekit-server-agent.sh` and `livekit-server-agent-health.sh` files are
+byte-for-byte identical to the files on the current `webmeetInfra/main`
+branch. The image's installed command set includes `livekit-server`, `egress`,
+`redis-server`, `turnserver`, `nginx`, `certbot`, `python3`, Node/npm,
+`git`/`make`/`g++`, `curl`, `nc`, `tini`, and `getent`.
+
+The mutable `webmeet-infra` tag is not part of this manifest contract because
+it may be republished for a different source branch and service topology. A
+replacement release must be built from an exact `webmeetInfra/main` revision,
+smoke-tested on both supported architectures, checked for the complete command
+set and current supervisor scripts, then reviewed and pinned here by immutable
+multi-architecture digest before deployment.
 
 ### Supervised services
 

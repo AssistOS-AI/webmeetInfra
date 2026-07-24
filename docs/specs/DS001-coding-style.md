@@ -20,12 +20,10 @@ The local source layout is contract-bearing:
 
 | Path | Purpose |
 | --- | --- |
-| `liveKitServerAgent/manifest.json` | Ploinky agent command, network profile, ports, volumes, readiness, and derived secret contract. |
-| `AssistOS-AI/container-image-builds/images/livekit-server-agent/Dockerfile` | Central runtime image definition that installs Redis, Coturn, LiveKit Server, LiveKit Egress, Nginx, Certbot, Node, Python, and health-probe helpers against this repository's `liveKitServerAgent` build context. |
+| `liveKitServerAgent/manifest.json` | Immutable runtime-image digest plus Ploinky agent command, network profile, ports, volumes, readiness, and derived secret contract. |
 | `liveKitServerAgent/scripts/hooks/preinstall.sh` | Generates runtime config under `.data/liveKitServerAgent/generated/`. |
 | `liveKitServerAgent/scripts/start-livekit-server-agent.sh` | Supervises the in-container services and readiness gate. |
 | `liveKitServerAgent/scripts/health/livekit-server-agent-health.sh` | Health endpoint helper used by Ploinky TCP readiness. |
-| `AssistOS-AI/container-image-builds/.github/workflows/publish-livekit-server-agent.yml` | Manual Docker image publishing workflow. |
 | `docs/specs/` | Authoritative DS contracts. |
 
 Generated or runtime-owned files such as LiveKit YAML, Egress YAML, Redis data, TLS material, and recording outputs must not be treated as hand-authored source files. Generated config templates must use manifest-provided env and derived secrets; they must not commit plaintext local credentials.
